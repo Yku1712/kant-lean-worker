@@ -1,0 +1,12 @@
+name = "lean-worker"
+version = "0.1.0"
+defaultTargets = ["lean-worker"]
+
+[[require]]
+name = "leanio"
+git = "https://github.com/ecyrbe/leanio.git"
+rev = "main"
+
+[[lean_exe]]
+name = "lean-worker"
+root = "Main"

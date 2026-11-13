@@ -1,0 +1,16 @@
+{"version": "1.3.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"url": "https://github.com/ecyrbe/leanio.git",
+   "type": "git",
+   "subDir": null,
+   "scope": "",
+   "rev": "0bb212d57f3dba2d76cf601f76a7c431a51c902e",
+   "name": "leanio",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "main",
+   "inherited": false,
+   "configFile": "lakefile.toml"}],
+ "name": "«lean-worker»",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}
