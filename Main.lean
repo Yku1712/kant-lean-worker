@@ -1,5 +1,6 @@
 import LeanIO
 import Lean.Data.Json
+import SheafAxioms
 open LeanIO
 open LeanIO.Router
 open Std.Http
@@ -21,18 +22,42 @@ def getSeed (cid : String) : Option (String × String × String × String × Str
   | "bafkda5130a0825c7afe" => some ("6", "2,13,34", "1", "0xda5161a8025c7afe", "5 (C(4))", "T_17", "(2 mod 71, 13 mod 59, 34 mod 47)")
   | _ => none
 
-def rdfaPayload (cid : String) : String :=
-  let (t, shard, p, a, bott, hecke, orbifold) :=
-    match getSeed cid with
-    | some seed => seed
-    | none =>
-      let h := hash cid
-      let pr := (h % 10) + 1
-      let ad := h * 16
-      ("0", "62,43,36", toString pr, "0x" ++ toString ad, "1 (C)", "T_13", "(62 mod 71, 43 mod 59, 36 mod 47)")
+def deriveFromHash (cid : String) : String × String × String × String × String × String × String :=
+  let h : UInt64 := hash cid
+  let s0 : Nat := ((h / 1) % 71).toNat
+  let s1 : Nat := ((h / 71) % 59).toNat
+  let s2 : Nat := ((h / (71 * 59)) % 47).toNat
+  let pr : UInt64 := (h % 10) + 1
+  let ad : UInt64 := h * 16
+  ("0",
+   s!"{s0},{s1},{s2}",
+   toString pr,
+   "0x" ++ toString ad,
+   "1 (C)",
+   "T_13",
+   s!"({s0} mod 71, {s1} mod 59, {s2} mod 47)")
 
+def sheafTuple (cid : String) : String × String × String × String × String × String × String :=
+  match getSeed cid with
+  | some seed => seed
+  | none => deriveFromHash cid
+
+def getCrtFromShard (shardStr : String) : Nat :=
+  let parts := shardStr.splitOn ","
+  match parts with
+  | [s0, s1, s2] =>
+    let n0 := match s0.trimAscii.toString.toNat? with | some n => n | none => 0
+    let n1 := match s1.trimAscii.toString.toNat? with | some n => n | none => 0
+    let n2 := match s2.trimAscii.toString.toNat? with | some n => n | none => 0
+    ERDFa.crtCombine n0 n1 n2
+  | _ => 0
+
+def rdfaPayload (cid : String) : String :=
+  let (t, shard, p, a, bott, hecke, orbifold) := sheafTuple cid
+  let crt := getCrtFromShard shard
   "<!DOCTYPE html>\n<html>\n<head><title>ERDFa Sheaf Section</title></head>\n<body>\n<div typeof=\"erdfa:SheafSection dasl:Type" ++ t ++ "\" about=\"#" ++ cid ++ "\">\n" ++
   "  <meta property=\"erdfa:shard\" content=\"" ++ shard ++ "\" />\n" ++
+  "  <meta property=\"erdfa:crt\" content=\"" ++ toString crt ++ "\" />\n" ++
   "  <meta property=\"erdfa:encoding\" content=\"raw\" />\n" ++
   "  <meta property=\"erdfa:prime\" content=\"" ++ p ++ "\" />\n" ++
   "  <meta property=\"dasl:addr\" content=\"" ++ a ++ "\" />\n" ++
@@ -45,18 +70,12 @@ def rdfaPayload (cid : String) : String :=
   "</div>\n</body>\n</html>"
 
 def jsonPayload (cid : String) : Json :=
-  let (t, shard, p, a, bott, hecke, orbifold) :=
-    match getSeed cid with
-    | some seed => seed
-    | none =>
-      let h := hash cid
-      let pr := (h % 10) + 1
-      let ad := h * 16
-      ("0", "62,43,36", toString pr, "0x" ++ toString ad, "1 (C)", "T_13", "(62 mod 71, 43 mod 59, 36 mod 47)")
-
+  let (t, shard, p, a, bott, hecke, orbifold) := sheafTuple cid
+  let crt := getCrtFromShard shard
   Json.mkObj [
     ("cid", Json.str cid),
     ("erdfa:shard", Json.str shard),
+    ("erdfa:crt", Json.str (toString crt)),
     ("erdfa:encoding", Json.str "raw"),
     ("erdfa:prime", Json.str p),
     ("dasl:addr", Json.str a),
@@ -68,7 +87,6 @@ def jsonPayload (cid : String) : Json :=
     ("sheaf:subgroupIndex", Json.str "erdfa:H/raw")
   ]
 
--- ZERO TRUST: Strict mathematical validation via FromJson
 structure SheafSection where
   cid : String
   shard : List Nat
@@ -121,7 +139,13 @@ def showJson := GET "/api/erdfa/{cid}" (⟨cid⟩ : Path String) => do
   return (jsonPayload (cid : String))
 
 def submitSection := POST "/api/erdfa/submit" (⟨body⟩ : LeanIO.Json SheafSection) => do
-  return Json.mkObj [("status", Json.str "ok"), ("message", Json.str "SheafSection validated mathematically"), ("cid", Json.str body.cid)]
+  let crtVal := getCrtFromShard (String.intercalate "," (body.shard.map toString))
+  return Json.mkObj [
+    ("status", Json.str "ok"), 
+    ("message", Json.str "SheafSection validated mathematically"), 
+    ("cid", Json.str body.cid),
+    ("crt", Json.str (toString crtVal))
+  ]
 
 def index := GET "/" => do
   return "lean-worker ERDFa/Sheaf: try GET /erdfa/{cid} or /api/erdfa/{cid}"

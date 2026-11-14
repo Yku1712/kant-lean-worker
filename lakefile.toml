@@ -7,6 +7,9 @@ name = "leanio"
 git = "https://github.com/ecyrbe/leanio.git"
 rev = "main"
 
+[[lean_lib]]
+name = "SheafAxioms"
+
 [[lean_exe]]
 name = "lean-worker"
 root = "Main"
