@@ -1,9 +1,11 @@
 import LeanIO
+import Lean.Data.Json
 open LeanIO
 open LeanIO.Router
 open Std.Http
 open Std.Async
 open Std.Http.Server
+open Lean
 
 structure Html where
   content : String
@@ -11,63 +13,122 @@ structure Html where
 instance : IntoResponse Html where
   into_response html := do
     let h ← html
-    Response.ok |>.header (.mk "content-type") (.mk "text/html; charset=utf-8") |>.header (.mk "access-control-allow-origin") (.mk "*") |>.bytes h.content.toUTF8
+    Response.ok |>.header (.mk "content-type") (.mk "text/html; charset=utf-8") |>.header (.mk "access-control-allow-origin") (.mk "*") |>.text h.content
 
-structure Json where
-  content : String
-
-instance : IntoResponse Json where
-  into_response json := do
-    let j ← json
-    Response.ok |>.header (.mk "content-type") (.mk "application/json") |>.header (.mk "access-control-allow-origin") (.mk "*") |>.bytes j.content.toUTF8
+def getSeed (cid : String) : Option (String × String × String × String × String × String × String) :=
+  match cid with
+  | "bafkda5131928007593a" => some ("0", "62,43,36", "1", "0xda5101480007593a", "1 (C)", "T_13", "(62 mod 71, 43 mod 59, 36 mod 47)")
+  | "bafkda5130a0825c7afe" => some ("6", "2,13,34", "1", "0xda5161a8025c7afe", "5 (C(4))", "T_17", "(2 mod 71, 13 mod 59, 34 mod 47)")
+  | _ => none
 
 def rdfaPayload (cid : String) : String :=
-  let h := hash cid
-  let p := (h % 10) + 1
-  let a := h * 16
-  "<div typeof=\"erdfa:SheafSection dasl:Type0\" about=\"#" ++ cid ++ "\">\n" ++
-  "  <meta property=\"erdfa:shard\" content=\"62,43,36\" />\n" ++
-  "  <meta property=\"erdfa:encoding\" content=\"raw\" />\n" ++
-  "  <meta property=\"erdfa:prime\" content=\"" ++ toString p ++ "\" />\n" ++
-  "  <meta property=\"dasl:addr\" content=\"0x" ++ toString a ++ "\" />\n" ++
-  "  <meta property=\"dasl:type\" content=\"0\" />\n" ++
-  "  <meta property=\"dasl:eigenspace\" content=\"Earth\" />\n" ++
-  "  <meta property=\"dasl:bott\" content=\"1 (C)\" />\n" ++
-  "  <meta property=\"dasl:hecke\" content=\"T_13\" />\n" ++
-  "  <meta property=\"sheaf:orbifold\" content=\"(62 mod 71, 43 mod 59, 36 mod 47)\" />\n" ++
-  "  <link property=\"sheaf:subgroupIndex\" href=\"erdfa:H/raw\" />\n" ++
-  "</div>"
+  let (t, shard, p, a, bott, hecke, orbifold) :=
+    match getSeed cid with
+    | some seed => seed
+    | none =>
+      let h := hash cid
+      let pr := (h % 10) + 1
+      let ad := h * 16
+      ("0", "62,43,36", toString pr, "0x" ++ toString ad, "1 (C)", "T_13", "(62 mod 71, 43 mod 59, 36 mod 47)")
 
-def jsonPayload (cid : String) : String :=
-  let h := hash cid
-  let p := (h % 10) + 1
-  let a := h * 16
-  "{\n" ++
-  "  \"cid\": \"" ++ cid ++ "\",\n" ++
-  "  \"erdfa:shard\": \"62,43,36\",\n" ++
-  "  \"erdfa:encoding\": \"raw\",\n" ++
-  "  \"erdfa:prime\": \"" ++ toString p ++ "\",\n" ++
-  "  \"dasl:addr\": \"0x" ++ toString a ++ "\",\n" ++
-  "  \"dasl:type\": \"0\",\n" ++
-  "  \"dasl:eigenspace\": \"Earth\",\n" ++
-  "  \"dasl:bott\": \"1 (C)\",\n" ++
-  "  \"dasl:hecke\": \"T_13\",\n" ++
-  "  \"sheaf:orbifold\": \"(62 mod 71, 43 mod 59, 36 mod 47)\",\n" ++
-  "  \"sheaf:subgroupIndex\": \"erdfa:H/raw\"\n" ++
-  "}"
+  "<!DOCTYPE html>\n<html>\n<head><title>ERDFa Sheaf Section</title></head>\n<body>\n<div typeof=\"erdfa:SheafSection dasl:Type" ++ t ++ "\" about=\"#" ++ cid ++ "\">\n" ++
+  "  <meta property=\"erdfa:shard\" content=\"" ++ shard ++ "\" />\n" ++
+  "  <meta property=\"erdfa:encoding\" content=\"raw\" />\n" ++
+  "  <meta property=\"erdfa:prime\" content=\"" ++ p ++ "\" />\n" ++
+  "  <meta property=\"dasl:addr\" content=\"" ++ a ++ "\" />\n" ++
+  "  <meta property=\"dasl:type\" content=\"" ++ t ++ "\" />\n" ++
+  "  <meta property=\"dasl:eigenspace\" content=\"Earth\" />\n" ++
+  "  <meta property=\"dasl:bott\" content=\"" ++ bott ++ "\" />\n" ++
+  "  <meta property=\"dasl:hecke\" content=\"" ++ hecke ++ "\" />\n" ++
+  "  <meta property=\"sheaf:orbifold\" content=\"" ++ orbifold ++ "\" />\n" ++
+  "  <link property=\"sheaf:subgroupIndex\" href=\"erdfa:H/raw\" />\n" ++
+  "</div>\n</body>\n</html>"
+
+def jsonPayload (cid : String) : Json :=
+  let (t, shard, p, a, bott, hecke, orbifold) :=
+    match getSeed cid with
+    | some seed => seed
+    | none =>
+      let h := hash cid
+      let pr := (h % 10) + 1
+      let ad := h * 16
+      ("0", "62,43,36", toString pr, "0x" ++ toString ad, "1 (C)", "T_13", "(62 mod 71, 43 mod 59, 36 mod 47)")
+
+  Json.mkObj [
+    ("cid", Json.str cid),
+    ("erdfa:shard", Json.str shard),
+    ("erdfa:encoding", Json.str "raw"),
+    ("erdfa:prime", Json.str p),
+    ("dasl:addr", Json.str a),
+    ("dasl:type", Json.str t),
+    ("dasl:eigenspace", Json.str "Earth"),
+    ("dasl:bott", Json.str bott),
+    ("dasl:hecke", Json.str hecke),
+    ("sheaf:orbifold", Json.str orbifold),
+    ("sheaf:subgroupIndex", Json.str "erdfa:H/raw")
+  ]
+
+-- ZERO TRUST: Strict mathematical validation via FromJson
+structure SheafSection where
+  cid : String
+  shard : List Nat
+  prime : Nat
+  encoding : String
+  addr : String
+  dasl_type : String
+  eigenspace : String
+  bott : String
+  hecke : String
+  orbifold : String
+  subgroupIndex : String
+
+instance : FromJson SheafSection where
+  fromJson? j := do
+    let cid ← j.getObjValAs? String "cid"
+    let shardStr ← j.getObjValAs? String "erdfa:shard"
+    let primeStr ← j.getObjValAs? String "erdfa:prime"
+    let prime ← match primeStr.toNat? with
+      | some n => pure n
+      | none => throw "erdfa:prime must be a valid natural number"
+    let shardParts := shardStr.splitOn ","
+    if shardParts.length != 3 then throw "erdfa:shard must have exactly 3 elements"
+    let shard ← shardParts.mapM (fun p => do
+      match p.trimAscii.toString.toNat? with
+      | some n => pure n
+      | none => throw s!"Invalid shard element: {p}")
+    let orbifold ← j.getObjValAs? String "sheaf:orbifold"
+    match shard with
+    | [s0, s1, s2] =>
+      if s0 >= 71 || s1 >= 59 || s2 >= 47 then
+        throw s!"Shard components out of modular range: ({s0},{s1},{s2})"
+      let expectedOrb := s!"({s0} mod 71, {s1} mod 59, {s2} mod 47)"
+      if orbifold != expectedOrb then
+        throw s!"Mathematical mismatch: orbifold is {orbifold}, expected {expectedOrb}"
+    | _ => throw "Invalid shard length"
+    let encoding ← j.getObjValAs? String "erdfa:encoding"
+    let addr ← j.getObjValAs? String "dasl:addr"
+    let dasl_type ← j.getObjValAs? String "dasl:type"
+    let eigenspace ← j.getObjValAs? String "dasl:eigenspace"
+    let bott ← j.getObjValAs? String "dasl:bott"
+    let hecke ← j.getObjValAs? String "dasl:hecke"
+    let subgroupIndex ← j.getObjValAs? String "sheaf:subgroupIndex"
+    return { cid, shard, prime, encoding, addr, dasl_type, eigenspace, bott, hecke, orbifold, subgroupIndex }
 
 def showSection := GET "/erdfa/{cid}" (⟨cid⟩ : Path String) => do
   return (show Html from { content := rdfaPayload (cid : String) })
 
 def showJson := GET "/api/erdfa/{cid}" (⟨cid⟩ : Path String) => do
-  return (show Json from { content := jsonPayload (cid : String) })
+  return (jsonPayload (cid : String))
+
+def submitSection := POST "/api/erdfa/submit" (⟨body⟩ : LeanIO.Json SheafSection) => do
+  return Json.mkObj [("status", Json.str "ok"), ("message", Json.str "SheafSection validated mathematically"), ("cid", Json.str body.cid)]
 
 def index := GET "/" => do
   return "lean-worker ERDFa/Sheaf: try GET /erdfa/{cid} or /api/erdfa/{cid}"
 
 def main : IO Unit := Async.block do
-  let router := Router.empty |>.addRoute showSection |>.addRoute showJson |>.addRoute index
-  let addr := .v4 ⟨.ofParts 127 0 0 1, 8080⟩
+  let router := Router.empty |>.addRoute showSection |>.addRoute showJson |>.addRoute submitSection |>.addRoute index
+  let addr := .v4 ⟨.ofParts 0 0 0 0, 8080⟩
   let server ← router.serve addr
   IO.println "lean-worker on http://127.0.0.1:8080"
   server.waitShutdown
