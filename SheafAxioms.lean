@@ -30,12 +30,12 @@ theorem crt_unique (x y : Nat)
   omega
 
 /-- CRT Combination: reconstruct the unique global integer from the 3 residues.
-    M = 71 * 59 * 47 = 196983
+    M = 71 * 59 * 47 = 196883
     M0 = 59 * 47 = 2773; M0_inv mod 71 = 18; term0 = 2773 * 18 = 49914
     M1 = 71 * 47 = 3337; M1_inv mod 59 = 34; term1 = 3337 * 34 = 113458
     M2 = 71 * 59 = 4189; M2_inv mod 47 = 8;  term2 = 4189 * 8  = 33512
 -/
 def crtCombine (s0 s1 s2 : Nat) : Nat :=
-  (s0 * 49914 + s1 * 113458 + s2 * 33512) % 196983
+  (s0 * 49914 + s1 * 113458 + s2 * 33512) % 196883
 
 end ERDFa
