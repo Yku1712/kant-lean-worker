@@ -15,7 +15,7 @@ structure Html where
 instance : IntoResponse Html where
   into_response html := do
     let h ← html
-    Response.ok |>.header (.mk "content-type") (.mk "text/html; charset=utf-8") |>.header (.mk "access-control-allow-origin") (.mk "*") |>.text h.content
+    Response.ok |>.header (.mk "access-control-allow-origin") (.mk "*") |>.html h.content
 
 def getSeed (cid : String) : Option (String × String × String × String × String × String × String) :=
   match cid with
