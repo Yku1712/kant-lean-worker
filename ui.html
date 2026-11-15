@@ -13,11 +13,14 @@
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { text-align: left; padding: 8px; border-bottom: 1px solid #333; }
         th { color: #888; }
-        button { background: #00ff00; color: #000; border: none; padding: 8px 16px; cursor: pointer; font-weight: bold; border-radius: 4px; }
-        button:hover { background: #00cc00; }
-        input, textarea { width: 100%; background: #222; color: #00ff00; border: 1px solid #444; padding: 8px; margin-bottom: 10px; font-family: monospace; box-sizing: border-box; }
+        button, .btn { background: #00ff00; color: #000; border: none; padding: 8px 16px; cursor: pointer; font-weight: bold; border-radius: 4px; text-decoration: none; display: inline-block; font-size: 0.9em; }
+        button:hover, .btn:hover { background: #00cc00; }
+        .btn-alt { background: #00ffff; }
+        .btn-alt:hover { background: #00cccc; }
+        input { width: 100%; background: #222; color: #00ff00; border: 1px solid #444; padding: 8px; margin-bottom: 10px; font-family: monospace; box-sizing: border-box; }
         .error { color: #ff0000; }
         .success { color: #00ff00; }
+        .exports { margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; }
     </style>
 </head>
 <body>
@@ -30,12 +33,23 @@
             <button onclick="loadData()">Refresh</button>
         </div>
         <div class="card">
-            <h2>Submit Theory</h2>
+            <h2>Submit New Theory</h2>
+            <p style="font-size:0.8em; color:#888; margin-top:0;">Generates a full SheafSection via monsterHash, validates, and persists.</p>
             <input type="text" id="theoryName" placeholder="Theory Name (e.g. crank_alpha)">
-            <button onclick="submitTheory()">Hash & Submit</button>
-            <div id="submitResult"></div>
+            <button onclick="submitTheory()">Hash, Validate & Submit</button>
+            <div id="submitResult" style="margin-top:10px;"></div>
         </div>
     </div>
+    
+    <div class="card" style="margin-top: 20px;">
+        <h2>Export Knowledge Base</h2>
+        <div class="exports">
+            <a href="/api/erdfa/export" target="_blank" class="btn btn-alt">Export JSON</a>
+            <a href="/api/erdfa/export/jsonld" target="_blank" class="btn btn-alt">Export JSON-LD</a>
+            <a href="/api/erdfa/export/xml" target="_blank" class="btn btn-alt">Export XML</a>
+        </div>
+    </div>
+
     <div class="card" style="margin-top: 20px;">
         <h2>Knowledge Base (Latest)</h2>
         <table>
@@ -46,28 +60,72 @@
 
     <script>
         async function loadData() {
-            const statusRes = await fetch('/api/erdfa/status');
-            const statusData = await statusRes.json();
-            document.getElementById('status').innerText = statusData.status;
-            document.getElementById('count').innerText = statusData.sections_count;
+            try {
+                const statusRes = await fetch('/api/erdfa/status');
+                const statusData = await statusRes.json();
+                document.getElementById('status').innerText = statusData.status;
+                document.getElementById('count').innerText = statusData.sections_count;
 
-            const listRes = await fetch('/api/erdfa/export');
-            const listData = await listRes.json();
-            const tbody = document.getElementById('kbTable');
-            tbody.innerHTML = '';
-            listData.reverse().slice(0, 10).forEach(s => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `<td>${s.cid}</td><td>${s['erdfa:shard']}</td><td>${s['erdfa:crt']}</td><td>${s['dasl:eigenspace']}</td>`;
-                tbody.appendChild(tr);
-            });
+                const listRes = await fetch('/api/erdfa/export');
+                const listData = await listRes.json();
+                const tbody = document.getElementById('kbTable');
+                tbody.innerHTML = '';
+                listData.reverse().slice(0, 15).forEach(s => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td>${s.cid}</td><td>${s['erdfa:shard']}</td><td>${s['erdfa:crt']}</td><td>${s['dasl:eigenspace']}</td>`;
+                    tbody.appendChild(tr);
+                });
+            } catch (e) {
+                console.error(e);
+            }
         }
 
         async function submitTheory() {
-            const name = document.getElementById('theoryName').value;
-            const res = await fetch('/api/erdfa/hash/' + encodeURIComponent(name));
-            const data = await res.json();
-            document.getElementById('submitResult').innerHTML = `<span class="success">Derived: ${data['erdfa:shard']} (CRT: ${data['erdfa:crt']})</span>`;
-            // In a full version, we would construct the full SheafSection JSON and POST it here.
+            const name = document.getElementById('theoryName').value.trim();
+            if (!name) return alert("Enter a theory name");
+            
+            const res = document.getElementById('submitResult');
+            res.innerHTML = "Hashing...";
+            
+            try {
+                const hashRes = await fetch('/api/erdfa/hash/' + encodeURIComponent(name));
+                const hashData = await hashRes.json();
+                
+                // Construct a valid 18-char DA51 address (Type 0)
+                const pad = Math.random().toString(16).slice(2, 13).padEnd(11, '0');
+                const addr = "0xda510" + pad;
+                
+                const payload = {
+                    "cid": "theory_" + name,
+                    "erdfa:shard": hashData["erdfa:shard"],
+                    "erdfa:prime": "1",
+                    "erdfa:encoding": "raw",
+                    "dasl:addr": addr,
+                    "dasl:type": "0",
+                    "dasl:eigenspace": "Earth",
+                    "dasl:bott": "0 (R)",
+                    "dasl:hecke": "T_2",
+                    "sheaf:orbifold": hashData["sheaf:orbifold"],
+                    "sheaf:subgroupIndex": "erdfa:H/raw"
+                };
+                
+                const submitRes = await fetch('/api/erdfa/submit', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const submitData = await submitRes.json();
+                
+                if (submitRes.ok) {
+                    res.innerHTML = `<span class="success">Success: ${submitData.status.toUpperCase()} (CRT: ${submitData.crt})</span>`;
+                    document.getElementById('theoryName').value = '';
+                    loadData();
+                } else {
+                    res.innerHTML = `<span class="error">Error: ${submitData.message || submitData}</span>`;
+                }
+            } catch (e) {
+                res.innerHTML = `<span class="error">Network error</span>`;
+            }
         }
 
         loadData();
