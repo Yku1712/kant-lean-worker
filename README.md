@@ -38,3 +38,8 @@ The repository includes an end-to-end test suite (11 checks, all green):
 ```bash
 ./test.sh
 eof
+
+## Live Demo Output
+
+### E2E test suite (`./test.sh` — 13/13 passing)
+
