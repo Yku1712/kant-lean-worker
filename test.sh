@@ -83,3 +83,23 @@ echo "=== Results: $PASS passed, $FAIL failed ==="
 if [ "$FAIL" -gt 0 ]; then
   exit 1
 fi
+echo "=== 10. Consensus: create new section ==="
+status=$(curl -sS -o /tmp/.out -w "%{http_code}" --max-time 5 -X POST "$BASE/api/erdfa/submit" \
+  -H "Content-Type: application/json" \
+  -d '{"cid":"test_consensus_002","erdfa:shard":"5,10,15","erdfa:prime":"1","erdfa:encoding":"raw","dasl:addr":"0xda51500000000000","dasl:type":"5","dasl:eigenspace":"Earth","dasl:bott":"1 (C)","dasl:hecke":"T_13","sheaf:orbifold":"(5 mod 71, 10 mod 59, 15 mod 47)","sheaf:subgroupIndex":"erdfa:H/raw"}')
+check_status "created returns 201" "201" "$status"
+check_contains "status created" '"status": "created"' "$(cat /tmp/.out)"
+
+echo "=== 11. Consensus: confirm same section ==="
+status=$(curl -sS -o /tmp/.out -w "%{http_code}" --max-time 5 -X POST "$BASE/api/erdfa/submit" \
+  -H "Content-Type: application/json" \
+  -d '{"cid":"test_consensus_002","erdfa:shard":"5,10,15","erdfa:prime":"1","erdfa:encoding":"raw","dasl:addr":"0xda51500000000000","dasl:type":"5","dasl:eigenspace":"Earth","dasl:bott":"1 (C)","dasl:hecke":"T_13","sheaf:orbifold":"(5 mod 71, 10 mod 59, 15 mod 47)","sheaf:subgroupIndex":"erdfa:H/raw"}')
+check_status "confirmed returns 200" "200" "$status"
+check_contains "status confirmed" '"status": "confirmed"' "$(cat /tmp/.out)"
+
+echo "=== 12. Consensus: reject contradiction ==="
+status=$(curl -sS -o /tmp/.out -w "%{http_code}" --max-time 5 -X POST "$BASE/api/erdfa/submit" \
+  -H "Content-Type: application/json" \
+  -d '{"cid":"test_consensus_002","erdfa:shard":"5,10,16","erdfa:prime":"1","erdfa:encoding":"raw","dasl:addr":"0xda51500000000000","dasl:type":"5","dasl:eigenspace":"Earth","dasl:bott":"1 (C)","dasl:hecke":"T_13","sheaf:orbifold":"(5 mod 71, 10 mod 59, 16 mod 47)","sheaf:subgroupIndex":"erdfa:H/raw"}')
+check_status "contradiction returns 422" "422" "$status"
+check_contains "status contradiction" '"status": "contradiction"' "$(cat /tmp/.out)"

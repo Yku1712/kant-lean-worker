@@ -126,12 +126,9 @@ instance : FromJson SheafSection where
       if orbifold != expectedOrb then
         throw s!"Mathematical mismatch: orbifold is {orbifold}, expected {expectedOrb}"
     | _ => throw "Invalid shard length"
-    
     let encoding ← j.getObjValAs? String "erdfa:encoding"
     let addr ← j.getObjValAs? String "dasl:addr"
     let dasl_type ← j.getObjValAs? String "dasl:type"
-    
-    -- DA51 Structural Validation
     if !addr.startsWith "0xda51" then
       throw "dasl:addr must start with prefix 0xda51"
     if addr.length != 18 then
@@ -139,7 +136,6 @@ instance : FromJson SheafSection where
     let addrTypeChar := match (addr.toList.drop 6).head? with | some c => c.toString | none => ""
     if addrTypeChar != dasl_type then
       throw s!"DA51 Type mismatch: addr prefix has type '{addrTypeChar}', but dasl:type is '{dasl_type}'"
-      
     let eigenspace ← j.getObjValAs? String "dasl:eigenspace"
     let bott ← j.getObjValAs? String "dasl:bott"
     let hecke ← j.getObjValAs? String "dasl:hecke"
@@ -178,12 +174,14 @@ def listAll := GET "/api/erdfa/list" => do
   return Json.mkObj [("count", Json.num sections.size), ("sections", Json.arr sections)]
 
 def submitSection := POST "/api/erdfa/submit" (⟨body⟩ : LeanIO.Json SheafSection) => do
-  let crtVal := getCrtFromShard (String.intercalate "," (body.shard.map toString))
+  let incomingShard := String.intercalate "," (body.shard.map toString)
+  let crtVal := getCrtFromShard incomingShard
   IO.FS.createDirAll "data"
   let path := ("data" : System.FilePath) / s!"{body.cid}.json"
-  let j := Json.mkObj [
+
+  let newSectionJson := Json.mkObj [
     ("cid", Json.str body.cid),
-    ("erdfa:shard", Json.str (String.intercalate "," (body.shard.map toString))),
+    ("erdfa:shard", Json.str incomingShard),
     ("erdfa:crt", Json.str (toString crtVal)),
     ("erdfa:encoding", Json.str body.encoding),
     ("erdfa:prime", Json.str (toString body.prime)),
@@ -195,13 +193,45 @@ def submitSection := POST "/api/erdfa/submit" (⟨body⟩ : LeanIO.Json SheafSec
     ("sheaf:orbifold", Json.str body.orbifold),
     ("sheaf:subgroupIndex", Json.str body.subgroupIndex)
   ]
-  IO.FS.writeFile path (j.compress)
-  return Json.mkObj [
-    ("status", Json.str "ok"),
-    ("message", Json.str "SheafSection validated and persisted mathematically"),
-    ("cid", Json.str body.cid),
-    ("crt", Json.str (toString crtVal))
-  ]
+
+  if ← System.FilePath.pathExists path then
+    let existingContent ← IO.FS.readFile path
+    match Json.parse existingContent with
+    | .ok existing =>
+      let existingShard := match existing.getObjValAs? String "erdfa:shard" with
+        | .ok s => s
+        | .error _ => ""
+      if existingShard == incomingShard then
+        return (Status.ok, Json.mkObj [
+          ("status", Json.str "confirmed"),
+          ("message", Json.str "Section confirmed by additional submission (sheaf gluing verified)"),
+          ("cid", Json.str body.cid),
+          ("crt", Json.str (toString crtVal))
+        ])
+      else
+        return (Status.unprocessableEntity, Json.mkObj [
+          ("status", Json.str "contradiction"),
+          ("message", Json.str s!"Sheaf gluing failed: existing shard '{existingShard}' differs from incoming '{incomingShard}'"),
+          ("cid", Json.str body.cid),
+          ("existing_shard", Json.str existingShard),
+          ("incoming_shard", Json.str incomingShard)
+        ])
+    | .error _ =>
+      IO.FS.writeFile path newSectionJson.compress
+      return (Status.created, Json.mkObj [
+        ("status", Json.str "created"),
+        ("message", Json.str "Section created (overwrote corrupt file)"),
+        ("cid", Json.str body.cid),
+        ("crt", Json.str (toString crtVal))
+      ])
+  else
+    IO.FS.writeFile path newSectionJson.compress
+    return (Status.created, Json.mkObj [
+      ("status", Json.str "created"),
+      ("message", Json.str "Section created"),
+      ("cid", Json.str body.cid),
+      ("crt", Json.str (toString crtVal))
+    ])
 
 def index := GET "/" => do
   return "lean-worker ERDFa/Sheaf: try GET /erdfa/{cid} or /api/erdfa/{cid}"
