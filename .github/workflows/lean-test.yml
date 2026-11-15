@@ -1,0 +1,29 @@
+name: Lean Worker CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          
+      - name: Build Lean project
+        run: lake build
+        
+      - name: Run server in background
+        run: |
+          nohup lake exe lean-worker > server.log 2>&1 &
+          sleep 3
+          
+      - name: Run E2E test suite
+        run: ./test.sh
