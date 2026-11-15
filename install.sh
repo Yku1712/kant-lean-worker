@@ -74,3 +74,9 @@ echo "✅ Instalare completă!"
 echo "🌐 Accesează: http://localhost:8080/ui"
 echo "💡 Comenzi utile: kant-lean-worker status | stop | logs"
 echo "📁 Datele tale sunt salvate în: $INSTALL_DIR/data"
+
+# Adaugă în PATH dacă nu există deja
+if ! echo $PATH | grep -q "$HOME/.local/bin"; then
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+    echo "⚠️  Am adăugat ~/.local/bin în ~/.bashrc. Rulează: source ~/.bashrc"
+fi
