@@ -127,6 +127,7 @@ instance : FromJson SheafSection where
         throw s!"Mathematical mismatch: orbifold is {orbifold}, expected {expectedOrb}"
     | _ => throw "Invalid shard length"
     let encoding ← j.getObjValAs? String "erdfa:encoding"
+    if encoding != "raw" then throw "Only 'raw' encoding is supported"
     let addr ← j.getObjValAs? String "dasl:addr"
     let dasl_type ← j.getObjValAs? String "dasl:type"
     if !addr.startsWith "0xda51" then
@@ -136,9 +137,22 @@ instance : FromJson SheafSection where
     let addrTypeChar := match (addr.toList.drop 6).head? with | some c => c.toString | none => ""
     if addrTypeChar != dasl_type then
       throw s!"DA51 Type mismatch: addr prefix has type '{addrTypeChar}', but dasl:type is '{dasl_type}'"
+      
     let eigenspace ← j.getObjValAs? String "dasl:eigenspace"
+    let validEigenspace := ["Earth", "Spoke", "Hub", "Clock"]
+    if !validEigenspace.contains eigenspace then
+      throw s!"Invalid eigenspace: {eigenspace}. Must be Earth, Spoke, Hub, or Clock."
+      
     let bott ← j.getObjValAs? String "dasl:bott"
+    let validBott := ["0 (R)", "1 (C)", "2 (H)", "3 (H⊕H)", "4 (H(2))", "5 (C(4))", "6 (R(8))", "7 (R(8)⊕R(8))"]
+    if !validBott.contains bott then
+      throw s!"Invalid bott class: {bott}. Must be one of the 8 Bott periodicity classes."
+      
     let hecke ← j.getObjValAs? String "dasl:hecke"
+    let validHecke := ["T_2", "T_3", "T_5", "T_7", "T_11", "T_13", "T_17", "T_19", "T_23", "T_29", "T_31", "T_41", "T_47", "T_59", "T_71"]
+    if !validHecke.contains hecke then
+      throw s!"Invalid hecke prime: {hecke}. Must be one of the 15 supersingular primes."
+
     let subgroupIndex ← j.getObjValAs? String "sheaf:subgroupIndex"
     return { cid, shard, prime, encoding, addr, dasl_type, eigenspace, bott, hecke, orbifold, subgroupIndex }
 

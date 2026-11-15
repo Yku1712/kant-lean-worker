@@ -83,6 +83,7 @@ echo "=== Results: $PASS passed, $FAIL failed ==="
 if [ "$FAIL" -gt 0 ]; then
   exit 1
 fi
+rm -f ~/ZOS_INT02_LAB.6hY9Ggte/lean-worker/data/test_consensus_002.json
 echo "=== 10. Consensus: create new section ==="
 status=$(curl -sS -o /tmp/.out -w "%{http_code}" --max-time 5 -X POST "$BASE/api/erdfa/submit" \
   -H "Content-Type: application/json" \
