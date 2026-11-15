@@ -29,13 +29,29 @@ theorem crt_unique (x y : Nat)
     x = y := by
   omega
 
-/-- CRT Combination: reconstruct the unique global integer from the 3 residues.
-    M = 71 * 59 * 47 = 196883
-    M0 = 59 * 47 = 2773; M0_inv mod 71 = 18; term0 = 2773 * 18 = 49914
-    M1 = 71 * 47 = 3337; M1_inv mod 59 = 34; term1 = 3337 * 34 = 113458
-    M2 = 71 * 59 = 4189; M2_inv mod 47 = 8;  term2 = 4189 * 8  = 33512
--/
+/-- CRT Combination: reconstruct the unique global integer from the 3 residues. -/
 def crtCombine (s0 s1 s2 : Nat) : Nat :=
   (s0 * 49914 + s1 * 113458 + s2 * 33512) % 196883
+
+/-- Reconstruction correctness for modulo 71. -/
+theorem crt_reconstruct_71 (s0 s1 s2 : Nat)
+    (_h0 : s0 < 71) (_h1 : s1 < 59) (_h2 : s2 < 47) :
+    (crtCombine s0 s1 s2) % 71 = s0 := by
+  unfold crtCombine
+  omega
+
+/-- Reconstruction correctness for modulo 59. -/
+theorem crt_reconstruct_59 (s0 s1 s2 : Nat)
+    (_h0 : s0 < 71) (_h1 : s1 < 59) (_h2 : s2 < 47) :
+    (crtCombine s0 s1 s2) % 59 = s1 := by
+  unfold crtCombine
+  omega
+
+/-- Reconstruction correctness for modulo 47. -/
+theorem crt_reconstruct_47 (s0 s1 s2 : Nat)
+    (_h0 : s0 < 71) (_h1 : s1 < 59) (_h2 : s2 < 47) :
+    (crtCombine s0 s1 s2) % 47 = s2 := by
+  unfold crtCombine
+  omega
 
 end ERDFa
