@@ -201,7 +201,46 @@ def listAll := GET "/api/erdfa/list" => do
       | .error _ => pure ()
   return Json.mkObj [("count", Json.num sections.size), ("sections", Json.arr sections)]
 
-def submitSection := POST "/api/erdfa/submit" (⟨body⟩ : LeanIO.Json SheafSection) => do
+def exportAll := GET "/api/erdfa/export" => do
+  let dir := ("data" : System.FilePath)
+  if !(← System.FilePath.pathExists dir) then
+    return Json.arr #[]
+  let entries ← dir.readDir
+  let mut sections : Array Json := #[]
+  for entry in entries do
+    let name := entry.fileName
+    if name.endsWith ".json" then
+      let content ← IO.FS.readFile entry.path
+      match Json.parse content with
+      | .ok j => sections := sections.push j
+      | .error _ => pure ()
+  return Json.arr sections
+
+def statusEndpoint := GET "/api/erdfa/status" => do
+  let dir := ("data" : System.FilePath)
+  let mut count : Nat := 0
+  if ← System.FilePath.pathExists dir then
+    let entries ← dir.readDir
+    for entry in entries do
+      if entry.fileName.endsWith ".json" then count := count + 1
+  return Json.mkObj [
+    ("status", Json.str "healthy"),
+    ("node", Json.str "kant-lean-worker"),
+    ("version", Json.str "0.1.0"),
+    ("sections_count", Json.num count),
+    ("endpoints", Json.arr #[
+      Json.str "/erdfa/{cid}",
+      Json.str "/api/erdfa/{cid}",
+      Json.str "/api/erdfa/list",
+      Json.str "/api/erdfa/export",
+      Json.str "/api/erdfa/status",
+      Json.str "/api/erdfa/hash/{name}",
+      Json.str "/api/erdfa/submit",
+      Json.str "/api/erdfa/sync"
+    ])
+  ]
+
+def processSubmission (body : SheafSection) : ContextAsync (Status × Json) := do
   let incomingShard := String.intercalate "," (body.shard.map toString)
   let crtVal := getCrtFromShard incomingShard
   IO.FS.createDirAll "data"
@@ -261,6 +300,27 @@ def submitSection := POST "/api/erdfa/submit" (⟨body⟩ : LeanIO.Json SheafSec
       ("crt", Json.str (toString crtVal))
     ])
 
+def submitSection := POST "/api/erdfa/submit" (⟨body⟩ : LeanIO.Json SheafSection) => do
+  processSubmission body
+
+def syncSection := POST "/api/erdfa/sync" (⟨body⟩ : LeanIO.Json (Array SheafSection)) => do
+  let mut created := 0
+  let mut confirmed := 0
+  let mut contradictions := 0
+  for item in body do
+    let (_status, js) ← processSubmission item
+    let statusStr := match js.getObjValAs? String "status" with | .ok s => s | .error _ => ""
+    if statusStr == "created" then created := created + 1
+    else if statusStr == "confirmed" then confirmed := confirmed + 1
+    else if statusStr == "contradiction" then contradictions := contradictions + 1
+  return Json.mkObj [
+    ("status", Json.str "sync_complete"),
+    ("created", Json.num created),
+    ("confirmed", Json.num confirmed),
+    ("contradictions", Json.num contradictions),
+    ("total", Json.num (created + confirmed + contradictions))
+  ]
+
 def hashOracle := GET "/api/erdfa/hash/{name}" (⟨name⟩ : Path String) => do
   let (_t, shard, _p, a, _bott, _hecke, orbifold) := deriveMonsterHash (name : String)
   let crt := getCrtFromShard shard
@@ -272,44 +332,6 @@ def hashOracle := GET "/api/erdfa/hash/{name}" (⟨name⟩ : Path String) => do
     ("sheaf:orbifold", Json.str orbifold)
   ]
 
-def exportAll := GET "/api/erdfa/export" => do 
-  let dir := ("data" : System.FilePath) 
-  if !(← System.FilePath.pathExists dir) then 
-    return Json.arr #[] 
-  let entries ← dir.readDir 
-  let mut sections : Array Json := #[] 
-  for entry in entries do 
-    let name := entry.fileName 
-    if name.endsWith ".json" then 
-      let content ← IO.FS.readFile entry.path 
-      match Json.parse content with 
-      | .ok j => sections := sections.push j 
-      | .error _ => pure () 
-  return Json.arr sections
-
-def statusEndpoint := GET "/api/erdfa/status" => do 
-  let dir := ("data" : System.FilePath) 
-  let mut count : Nat := 0 
-  if ← System.FilePath.pathExists dir then 
-    let entries ← dir.readDir 
-    for entry in entries do 
-      if entry.fileName.endsWith ".json" then count := count + 1 
-  return Json.mkObj [ 
-    ("status", Json.str "healthy"), 
-    ("node", Json.str "kant-lean-worker"), 
-    ("version", Json.str "0.1.0"), 
-    ("sections_count", Json.num count), 
-    ("endpoints", Json.arr #[ 
-      Json.str "/erdfa/{cid}", 
-      Json.str "/api/erdfa/{cid}", 
-      Json.str "/api/erdfa/list", 
-      Json.str "/api/erdfa/export", 
-      Json.str "/api/erdfa/status", 
-      Json.str "/api/erdfa/hash/{name}", 
-      Json.str "/api/erdfa/submit" 
-    ]) 
-  ]
-
 def index := GET "/" => do
   return "lean-worker ERDFa/Sheaf: try GET /erdfa/{cid} or /api/erdfa/{cid}"
 
@@ -318,10 +340,11 @@ def main : IO Unit := Async.block do
     |>.addRoute showSection 
     |>.addRoute showJson 
     |>.addRoute listAll
-    |>.addRoute hashOracle
     |>.addRoute exportAll
     |>.addRoute statusEndpoint
+    |>.addRoute hashOracle
     |>.addRoute submitSection 
+    |>.addRoute syncSection
     |>.addRoute index
   let addr := .v4 ⟨.ofParts 0 0 0 0, 8080⟩
   let server ← router.serve addr

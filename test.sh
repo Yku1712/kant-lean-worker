@@ -119,3 +119,10 @@ echo "=== 15. Export endpoint ==="
 out=$(curl -sS --max-time 5 "$BASE/api/erdfa/export")
 check_contains "export returns array" '^\[' "$out"
 check_contains "export has meta_meme" 'meta_meme_fixed_point' "$out"
+
+echo "=== 16. Batch Sync ==="
+status=$(curl -sS -o /tmp/.out -w "%{http_code}" --max-time 5 -X POST "$BASE/api/erdfa/sync" \
+  -H "Content-Type: application/json" \
+  -d '[{"cid":"sync_batch_1","erdfa:shard":"7,8,9","erdfa:prime":"1","erdfa:encoding":"raw","dasl:addr":"0xda51070809000000","dasl:type":"0","dasl:eigenspace":"Earth","dasl:bott":"0 (R)","dasl:hecke":"T_2","sheaf:orbifold":"(7 mod 71, 8 mod 59, 9 mod 47)","sheaf:subgroupIndex":"erdfa:H/raw"}]')
+check_status "sync returns 200" "200" "$status"
+check_contains "sync_complete status" '"status": "sync_complete"' "$(cat /tmp/.out)"
