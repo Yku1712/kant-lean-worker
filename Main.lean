@@ -332,6 +332,24 @@ def hashOracle := GET "/api/erdfa/hash/{name}" (⟨name⟩ : Path String) => do
     ("sheaf:orbifold", Json.str orbifold)
   ]
 
+def filterSections := GET "/api/erdfa/filter/{field}/{value}" (⟨field⟩ : Path String) (⟨value⟩ : Path String) => do
+  let dir := ("data" : System.FilePath)
+  if !(← System.FilePath.pathExists dir) then
+    return Json.arr #[]
+  let entries ← dir.readDir
+  let mut sections : Array Json := #[]
+  for entry in entries do
+    let name := entry.fileName
+    if name.endsWith ".json" then
+      let content ← IO.FS.readFile entry.path
+      match Json.parse content with
+      | .ok j =>
+        match j.getObjValAs? String (field : String) with
+        | .ok v => if v == (value : String) then sections := sections.push j
+        | .error _ => pure ()
+      | .error _ => pure ()
+  return Json.arr sections
+
 def index := GET "/" => do
   return "lean-worker ERDFa/Sheaf: try GET /erdfa/{cid} or /api/erdfa/{cid}"
 
@@ -345,6 +363,7 @@ def main : IO Unit := Async.block do
     |>.addRoute hashOracle
     |>.addRoute submitSection 
     |>.addRoute syncSection
+    |>.addRoute filterSections
     |>.addRoute index
   let addr := .v4 ⟨.ofParts 0 0 0 0, 8080⟩
   let server ← router.serve addr
