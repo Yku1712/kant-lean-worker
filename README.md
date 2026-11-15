@@ -28,7 +28,10 @@ and **persistent local knowledge base** for Sheaf Sections.
 | `GET`  | `/erdfa/{cid}` | RDFa HTML representation. |
 | `GET`  | `/api/erdfa/{cid}` | JSON representation (reads from disk if persisted, else derives). |
 | `GET`  | `/api/erdfa/list` | Index of all persisted sections with their CRT values. |
-| `POST` | `/api/erdfa/submit` | Validate + compute CRT + persist. |
+| `GET`  | `/api/erdfa/export` | Full JSON array of all sections (IPLD DAG ingestion). |
+| `GET`  | `/api/erdfa/status` | Node health + endpoints + section count. |
+| `GET`  | `/api/erdfa/hash/{name}` | Hash oracle: derive shard + CRT from a name via `monsterHash`. |
+| `POST` | `/api/erdfa/submit` | Validate + compute CRT + persist (returns created/confirmed/contradiction). |
 | `GET`  | `/` | Plain-text index. |
 
 ## Test suite

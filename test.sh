@@ -109,3 +109,13 @@ echo "=== 13. Hash Oracle ==="
 out=$(curl -sS --max-time 5 "$BASE/api/erdfa/hash/test_theory")
 check_contains "hash oracle shard" '"erdfa:shard": "11,30,8"' "$out"
 check_contains "hash oracle crt" '"erdfa:crt": "86347"' "$out"
+
+echo "=== 14. Status endpoint ==="
+out=$(curl -sS --max-time 5 "$BASE/api/erdfa/status")
+check_contains "status is healthy" '"status": "healthy"' "$out"
+check_contains "status has node name" '"node": "kant-lean-worker"' "$out"
+
+echo "=== 15. Export endpoint ==="
+out=$(curl -sS --max-time 5 "$BASE/api/erdfa/export")
+check_contains "export returns array" '^\[' "$out"
+check_contains "export has meta_meme" 'meta_meme_fixed_point' "$out"
