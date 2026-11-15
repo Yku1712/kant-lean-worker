@@ -375,6 +375,10 @@ def tileDashboard := GET "/tile/dashboard" => do
               "</div>"
   return html
 
+def showUi := GET "/ui" => do
+  let content ← IO.FS.readFile "ui.html"
+  return (show Html from { content := content })
+
 def index := GET "/" => do
   return "lean-worker ERDFa/Sheaf: try GET /erdfa/{cid} or /api/erdfa/{cid}"
 
@@ -389,6 +393,7 @@ def main : IO Unit := Async.block do
     |>.addRoute hashOracle
     |>.addRoute submitSection 
     |>.addRoute syncSection
+    |>.addRoute showUi
     |>.addRoute filterSections
     |>.addRoute index
   let addr := .v4 ⟨.ofParts 0 0 0 0, 8080⟩

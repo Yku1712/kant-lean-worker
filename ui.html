@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kant Lean Worker</title>
+    <style>
+        body { font-family: monospace; background: #0a0a0a; color: #00ff00; padding: 20px; }
+        h1 { color: #fff; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { border: 1px solid #333; padding: 15px; border-radius: 8px; background: #111; }
+        .card h2 { margin-top: 0; color: #00ffff; font-size: 1.2em; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { text-align: left; padding: 8px; border-bottom: 1px solid #333; }
+        th { color: #888; }
+        button { background: #00ff00; color: #000; border: none; padding: 8px 16px; cursor: pointer; font-weight: bold; border-radius: 4px; }
+        button:hover { background: #00cc00; }
+        input, textarea { width: 100%; background: #222; color: #00ff00; border: 1px solid #444; padding: 8px; margin-bottom: 10px; font-family: monospace; box-sizing: border-box; }
+        .error { color: #ff0000; }
+        .success { color: #00ff00; }
+    </style>
+</head>
+<body>
+    <h1>🟢 Kant Lean Worker Dashboard</h1>
+    <div class="grid">
+        <div class="card">
+            <h2>Node Status</h2>
+            <p>Status: <span id="status">Loading...</span></p>
+            <p>Sections: <span id="count">0</span></p>
+            <button onclick="loadData()">Refresh</button>
+        </div>
+        <div class="card">
+            <h2>Submit Theory</h2>
+            <input type="text" id="theoryName" placeholder="Theory Name (e.g. crank_alpha)">
+            <button onclick="submitTheory()">Hash & Submit</button>
+            <div id="submitResult"></div>
+        </div>
+    </div>
+    <div class="card" style="margin-top: 20px;">
+        <h2>Knowledge Base (Latest)</h2>
+        <table>
+            <thead><tr><th>CID</th><th>Shard</th><th>CRT (Gödel)</th><th>Eigenspace</th></tr></thead>
+            <tbody id="kbTable"></tbody>
+        </table>
+    </div>
+
+    <script>
+        async function loadData() {
+            const statusRes = await fetch('/api/erdfa/status');
+            const statusData = await statusRes.json();
+            document.getElementById('status').innerText = statusData.status;
+            document.getElementById('count').innerText = statusData.sections_count;
+
+            const listRes = await fetch('/api/erdfa/export');
+            const listData = await listRes.json();
+            const tbody = document.getElementById('kbTable');
+            tbody.innerHTML = '';
+            listData.reverse().slice(0, 10).forEach(s => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${s.cid}</td><td>${s['erdfa:shard']}</td><td>${s['erdfa:crt']}</td><td>${s['dasl:eigenspace']}</td>`;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function submitTheory() {
+            const name = document.getElementById('theoryName').value;
+            const res = await fetch('/api/erdfa/hash/' + encodeURIComponent(name));
+            const data = await res.json();
+            document.getElementById('submitResult').innerHTML = `<span class="success">Derived: ${data['erdfa:shard']} (CRT: ${data['erdfa:crt']})</span>`;
+            // In a full version, we would construct the full SheafSection JSON and POST it here.
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
