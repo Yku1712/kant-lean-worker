@@ -48,8 +48,6 @@ eof
 
 ### E2E test suite (`./test.sh` — 13/13 passing)
 
-
-
 ## Quick Start
 
 
