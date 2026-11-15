@@ -332,23 +332,27 @@ def hashOracle := GET "/api/erdfa/hash/{name}" (⟨name⟩ : Path String) => do
     ("sheaf:orbifold", Json.str orbifold)
   ]
 
-def filterSections := GET "/api/erdfa/filter/{field}/{value}" (⟨field⟩ : Path String) (⟨value⟩ : Path String) => do
-  let dir := ("data" : System.FilePath)
-  if !(← System.FilePath.pathExists dir) then
-    return Json.arr #[]
-  let entries ← dir.readDir
-  let mut sections : Array Json := #[]
-  for entry in entries do
-    let name := entry.fileName
-    if name.endsWith ".json" then
-      let content ← IO.FS.readFile entry.path
-      match Json.parse content with
-      | .ok j =>
-        match j.getObjValAs? String (field : String) with
-        | .ok v => if v == (value : String) then sections := sections.push j
+def filterSections := GET "/api/erdfa/filter/{query}" (⟨query⟩ : Path String) => do
+  let parts := (query : String).splitOn "="
+  match parts with
+  | [field, value] =>
+    let dir := ("data" : System.FilePath)
+    if !(← System.FilePath.pathExists dir) then
+      return Json.arr #[]
+    let entries ← dir.readDir
+    let mut sections : Array Json := #[]
+    for entry in entries do
+      let name := entry.fileName
+      if name.endsWith ".json" then
+        let content ← IO.FS.readFile entry.path
+        match Json.parse content with
+        | .ok j =>
+          match j.getObjValAs? String field with
+          | .ok v => if v == value then sections := sections.push j
+          | .error _ => pure ()
         | .error _ => pure ()
-      | .error _ => pure ()
-  return Json.arr sections
+    return Json.arr sections
+  | _ => return Json.mkObj [("error", Json.str "Invalid query format. Use field=value")]
 
 def index := GET "/" => do
   return "lean-worker ERDFa/Sheaf: try GET /erdfa/{cid} or /api/erdfa/{cid}"

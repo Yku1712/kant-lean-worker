@@ -128,6 +128,6 @@ check_status "sync returns 200" "200" "$status"
 check_contains "sync_complete status" '"status": "sync_complete"' "$(cat /tmp/.out)"
 
 echo "=== 17. Filter/Query endpoint ==="
-out=$(curl -sS --max-time 5 "$BASE/api/erdfa/filter/dasl:eigenspace/Earth")
+out=$(curl -sS --max-time 5 "$BASE/api/erdfa/filter/dasl:eigenspace=Earth")
 check_contains "filter returns array" '^\[' "$out"
 check_contains "filter finds Earth" '"dasl:eigenspace": "Earth"' "$out"
