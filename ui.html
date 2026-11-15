@@ -7,7 +7,7 @@
     <style>
         body { font-family: monospace; background: #0a0a0a; color: #00ff00; padding: 20px; }
         h1 { color: #fff; border-bottom: 1px solid #333; padding-bottom: 10px; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
         .card { border: 1px solid #333; padding: 15px; border-radius: 8px; background: #111; }
         .card h2 { margin-top: 0; color: #00ffff; font-size: 1.2em; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
@@ -31,6 +31,12 @@
             <p>Status: <span id="status">Loading...</span></p>
             <p>Sections: <span id="count">0</span></p>
             <button onclick="loadData()">Refresh</button>
+        </div>
+        <div class="card">
+            <h2>Wallet Balances</h2>
+            <p>User Credits: <span id="userCredits">0</span></p>
+            <p>Node Credits: <span id="nodeCredits">0</span></p>
+            <button onclick="stakeCredits()">Stake +50 Credits</button>
         </div>
         <div class="card">
             <h2>Submit New Theory</h2>
@@ -66,6 +72,14 @@
                 document.getElementById('status').innerText = statusData.status;
                 document.getElementById('count').innerText = statusData.sections_count;
 
+                const walletRes = await fetch('/api/erdfa/wallet/default_user');
+                const walletData = await walletRes.json();
+                document.getElementById('userCredits').innerText = walletData.credits || 0;
+
+                const nodeRes = await fetch('/api/erdfa/wallet/lean_node_worker');
+                const nodeData = await nodeRes.json();
+                document.getElementById('nodeCredits').innerText = nodeData.credits || 0;
+
                 const listRes = await fetch('/api/erdfa/export');
                 const listData = await listRes.json();
                 const tbody = document.getElementById('kbTable');
@@ -78,6 +92,11 @@
             } catch (e) {
                 console.error(e);
             }
+        }
+
+        async function stakeCredits() {
+            await fetch('/api/erdfa/stake/default_user:50', { method: 'POST' });
+            loadData();
         }
 
         async function submitTheory() {

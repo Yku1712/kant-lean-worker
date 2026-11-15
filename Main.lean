@@ -12,10 +12,56 @@ open System (FilePath)
 structure Html where
   content : String
 
+def sanitizeFilename (name : String) : String :=
+  String.ofList (name.toList.map (fun c =>
+    if c == '?' || c == '*' || c == ':' || c == '<' || c == '>' || c == '|' || c == '"' || c == '\\' || c == '/' then '_' else c
+  ))
+
 instance : IntoResponse Html where
   into_response html := do
     let h ← html
     Response.ok |>.header (.mk "access-control-allow-origin") (.mk "*") |>.html h.content
+
+structure Wallet where
+  address : String
+  credits : Nat
+  deriving ToJson, FromJson
+
+def getWalletPath (addr : String) : System.FilePath :=
+  let dataDir := ("data/wallets" : System.FilePath)
+  dataDir / s!"{sanitizeFilename addr}.json"
+
+def loadWallet (addr : String) : ContextAsync Wallet := do
+  let path := getWalletPath addr
+  if ← System.FilePath.pathExists path then
+    let content ← IO.FS.readFile path
+    match Json.parse content with
+    | .ok j => 
+      match fromJson? j with
+      | .ok w => return w
+      | .error _ => return { address := addr, credits := 0 }
+    | .error _ => return { address := addr, credits := 0 }
+  else
+    return { address := addr, credits := 0 }
+
+def saveWallet (w : Wallet) : ContextAsync Unit := do
+  IO.FS.createDirAll "data/wallets"
+  let path := getWalletPath w.address
+  IO.FS.writeFile path (toJson w |>.compress)
+
+def deductCredits (addr : String) (amount : Nat) : ContextAsync Bool := do
+  let w ← loadWallet addr
+  if w.credits >= amount then
+    let new_w := { w with credits := w.credits - amount }
+    saveWallet new_w
+    return true
+  else
+    return false
+
+def addCredits (addr : String) (amount : Nat) : ContextAsync Unit := do
+  let w ← loadWallet addr
+  let new_w := { w with credits := w.credits + amount }
+  saveWallet new_w
 
 def getSeed (cid : String) : Option (String × String × String × String × String × String × String) :=
   match cid with
@@ -166,11 +212,6 @@ instance : FromJson SheafSection where
     let subgroupIndex ← j.getObjValAs? String "sheaf:subgroupIndex"
     return { cid, shard, prime, encoding, addr, dasl_type, eigenspace, bott, hecke, orbifold, subgroupIndex }
 
-def sanitizeFilename (name : String) : String :=
-  String.ofList (name.toList.map (fun c =>
-    if c == '?' || c == '*' || c == ':' || c == '<' || c == '>' || c == '|' || c == '"' || c == '\\' || c == '/' then '_' else c
-  ))
-
 def loadOrDerive (cid : String) : ContextAsync Json := do
   let path := ("data" : System.FilePath) / s!"{sanitizeFilename cid}.json"
   if ← System.FilePath.pathExists path then
@@ -306,7 +347,22 @@ def processSubmission (body : SheafSection) : ContextAsync (Status × Json) := d
     ])
 
 def submitSection := POST "/api/erdfa/submit" (⟨body⟩ : LeanIO.Json SheafSection) => do
-  processSubmission body
+  -- Taxa de rețea (Network Fee) pentru validare
+  let fee := 5
+  let user_wallet := "default_user"
+  let has_funds ← deductCredits user_wallet fee
+  if !has_funds then
+    return (Status.paymentRequired, Json.mkObj [("error", Json.str "Insufficient Service Credits. Please stake to earn more.")])
+  
+  let (status, js) ← processSubmission body
+  
+  -- Dacă a fost validat cu succes (created/confirmed), nodul primește recompensa (Proof of Succinct Work)
+  let statusStr := match js.getObjValAs? String "status" with | .ok s => s | .error _ => ""
+  if statusStr == "created" || statusStr == "confirmed" then
+    addCredits "lean_node_worker" fee
+  -- Dacă a fost contradicție, creditele sunt arse (nu se adaugă nimănui)
+  
+  return (status, js)
 
 def syncSection := POST "/api/erdfa/sync" (⟨body⟩ : LeanIO.Json (Array SheafSection)) => do
   let mut created := 0
@@ -384,6 +440,20 @@ def showUi := GET "/ui" => do
   let content ← IO.FS.readFile "ui.html"
   return (show Html from { content := content })
 
+def getWalletRoute := GET "/api/erdfa/wallet/{addr}" (⟨addr⟩ : Path String) => do
+  let w ← loadWallet (addr : String)
+  return Json.mkObj [("address", Json.str w.address), ("credits", Json.num w.credits)]
+
+def stakeRoute := POST "/api/erdfa/stake/{req}" (⟨req⟩ : Path String) => do
+  let parts := (req : String).splitOn ":"
+  match parts with
+  | [addr, amount] =>
+    let amt := match amount.toNat? with | some n => n | none => 0
+    addCredits addr amt
+    let w ← loadWallet addr
+    return (Status.ok, Json.mkObj [("status", Json.str "staked"), ("address", Json.str w.address), ("credits", Json.num w.credits)])
+  | _ => return (Status.badRequest, Json.mkObj [("error", Json.str "Invalid format. Use address:amount")])
+
 def index := GET "/" => do
   return "lean-worker ERDFa/Sheaf: try GET /erdfa/{cid} or /api/erdfa/{cid}"
 
@@ -400,6 +470,8 @@ def main : IO Unit := Async.block do
     |>.addRoute syncSection
     |>.addRoute showUi
     |>.addRoute filterSections
+    |>.addRoute getWalletRoute
+    |>.addRoute stakeRoute
     |>.addRoute index
   let addr := .v4 ⟨.ofParts 0 0 0 0, 8080⟩
   let server ← router.serve addr

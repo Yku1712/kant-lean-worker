@@ -29,6 +29,9 @@ check_contains() {
   fi
 }
 
+echo "=== 0. Stake credits for testing ==="
+curl -sS -X POST "$BASE/api/erdfa/stake/default_user:1000" > /dev/null
+
 echo "=== 1. Index route ==="
 out=$(curl -sS --max-time 5 "$BASE/")
 check_contains "index responds" "lean-worker" "$out"
