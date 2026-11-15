@@ -55,23 +55,6 @@ def getCrtFromShard (shardStr : String) : Nat :=
     ERDFa.crtCombine n0 n1 n2
   | _ => 0
 
-def rdfaPayload (cid : String) : String :=
-  let (t, shard, p, a, bott, hecke, orbifold) := sheafTuple cid
-  let crt := getCrtFromShard shard
-  "<!DOCTYPE html>\n<html>\n<head><title>ERDFa Sheaf Section</title></head>\n<body>\n<div typeof=\"erdfa:SheafSection dasl:Type" ++ t ++ "\" about=\"#" ++ cid ++ "\">\n" ++
-  "  <meta property=\"erdfa:shard\" content=\"" ++ shard ++ "\" />\n" ++
-  "  <meta property=\"erdfa:crt\" content=\"" ++ toString crt ++ "\" />\n" ++
-  "  <meta property=\"erdfa:encoding\" content=\"raw\" />\n" ++
-  "  <meta property=\"erdfa:prime\" content=\"" ++ p ++ "\" />\n" ++
-  "  <meta property=\"dasl:addr\" content=\"" ++ a ++ "\" />\n" ++
-  "  <meta property=\"dasl:type\" content=\"" ++ t ++ "\" />\n" ++
-  "  <meta property=\"dasl:eigenspace\" content=\"Earth\" />\n" ++
-  "  <meta property=\"dasl:bott\" content=\"" ++ bott ++ "\" />\n" ++
-  "  <meta property=\"dasl:hecke\" content=\"" ++ hecke ++ "\" />\n" ++
-  "  <meta property=\"sheaf:orbifold\" content=\"" ++ orbifold ++ "\" />\n" ++
-  "  <link property=\"sheaf:subgroupIndex\" href=\"erdfa:H/raw\" />\n" ++
-  "</div>\n</body>\n</html>"
-
 def jsonPayload (cid : String) : Json :=
   let (t, shard, p, a, bott, hecke, orbifold) := sheafTuple cid
   let crt := getCrtFromShard shard
@@ -89,6 +72,37 @@ def jsonPayload (cid : String) : Json :=
     ("sheaf:orbifold", Json.str orbifold),
     ("sheaf:subgroupIndex", Json.str "erdfa:H/raw")
   ]
+
+def rdfaFromJson (j : Json) : String :=
+  let getS (k : String) : String :=
+    match j.getObjValAs? String k with
+    | .ok s => s
+    | .error _ => ""
+  let cid := getS "cid"
+  let t := getS "dasl:type"
+  let shard := getS "erdfa:shard"
+  let crt := getS "erdfa:crt"
+  let p := getS "erdfa:prime"
+  let a := getS "dasl:addr"
+  let bott := getS "dasl:bott"
+  let hecke := getS "dasl:hecke"
+  let orbifold := getS "sheaf:orbifold"
+  let subgroupIndex := getS "sheaf:subgroupIndex"
+  let eigenspace := getS "dasl:eigenspace"
+  let encoding := getS "erdfa:encoding"
+  "<!DOCTYPE html>\n<html>\n<head><title>ERDFa Sheaf Section</title></head>\n<body>\n<div typeof=\"erdfa:SheafSection dasl:Type" ++ t ++ "\" about=\"#" ++ cid ++ "\">\n" ++
+  "  <meta property=\"erdfa:shard\" content=\"" ++ shard ++ "\" />\n" ++
+  "  <meta property=\"erdfa:crt\" content=\"" ++ crt ++ "\" />\n" ++
+  "  <meta property=\"erdfa:encoding\" content=\"" ++ encoding ++ "\" />\n" ++
+  "  <meta property=\"erdfa:prime\" content=\"" ++ p ++ "\" />\n" ++
+  "  <meta property=\"dasl:addr\" content=\"" ++ a ++ "\" />\n" ++
+  "  <meta property=\"dasl:type\" content=\"" ++ t ++ "\" />\n" ++
+  "  <meta property=\"dasl:eigenspace\" content=\"" ++ eigenspace ++ "\" />\n" ++
+  "  <meta property=\"dasl:bott\" content=\"" ++ bott ++ "\" />\n" ++
+  "  <meta property=\"dasl:hecke\" content=\"" ++ hecke ++ "\" />\n" ++
+  "  <meta property=\"sheaf:orbifold\" content=\"" ++ orbifold ++ "\" />\n" ++
+  "  <link property=\"sheaf:subgroupIndex\" href=\"" ++ subgroupIndex ++ "\" />\n" ++
+  "</div>\n</body>\n</html>"
 
 structure SheafSection where
   cid : String
@@ -137,29 +151,22 @@ instance : FromJson SheafSection where
     let addrTypeChar := match (addr.toList.drop 6).head? with | some c => c.toString | none => ""
     if addrTypeChar != dasl_type then
       throw s!"DA51 Type mismatch: addr prefix has type '{addrTypeChar}', but dasl:type is '{dasl_type}'"
-      
     let eigenspace ← j.getObjValAs? String "dasl:eigenspace"
     let validEigenspace := ["Earth", "Spoke", "Hub", "Clock"]
     if !validEigenspace.contains eigenspace then
       throw s!"Invalid eigenspace: {eigenspace}. Must be Earth, Spoke, Hub, or Clock."
-      
     let bott ← j.getObjValAs? String "dasl:bott"
     let validBott := ["0 (R)", "1 (C)", "2 (H)", "3 (H⊕H)", "4 (H(2))", "5 (C(4))", "6 (R(8))", "7 (R(8)⊕R(8))"]
     if !validBott.contains bott then
       throw s!"Invalid bott class: {bott}. Must be one of the 8 Bott periodicity classes."
-      
     let hecke ← j.getObjValAs? String "dasl:hecke"
     let validHecke := ["T_2", "T_3", "T_5", "T_7", "T_11", "T_13", "T_17", "T_19", "T_23", "T_29", "T_31", "T_41", "T_47", "T_59", "T_71"]
     if !validHecke.contains hecke then
       throw s!"Invalid hecke prime: {hecke}. Must be one of the 15 supersingular primes."
-
     let subgroupIndex ← j.getObjValAs? String "sheaf:subgroupIndex"
     return { cid, shard, prime, encoding, addr, dasl_type, eigenspace, bott, hecke, orbifold, subgroupIndex }
 
-def showSection := GET "/erdfa/{cid}" (⟨cid⟩ : Path String) => do
-  return (show Html from { content := rdfaPayload (cid : String) })
-
-def showJson := GET "/api/erdfa/{cid}" (⟨cid⟩ : Path String) => do
+def loadOrDerive (cid : String) : ContextAsync Json := do
   let path := ("data" : System.FilePath) / s!"{cid}.json"
   if ← System.FilePath.pathExists path then
     let content ← IO.FS.readFile path
@@ -168,6 +175,13 @@ def showJson := GET "/api/erdfa/{cid}" (⟨cid⟩ : Path String) => do
     | .error _ => return jsonPayload cid
   else
     return jsonPayload cid
+
+def showSection := GET "/erdfa/{cid}" (⟨cid⟩ : Path String) => do
+  let j ← loadOrDerive (cid : String)
+  return (show Html from { content := rdfaFromJson j })
+
+def showJson := GET "/api/erdfa/{cid}" (⟨cid⟩ : Path String) => do
+  loadOrDerive (cid : String)
 
 def listAll := GET "/api/erdfa/list" => do
   let dir := ("data" : System.FilePath)
@@ -247,15 +261,15 @@ def submitSection := POST "/api/erdfa/submit" (⟨body⟩ : LeanIO.Json SheafSec
       ("crt", Json.str (toString crtVal))
     ])
 
-def hashOracle := GET "/api/erdfa/hash/{name}" (⟨name⟩ : Path String) => do 
-  let (_t, shard, _p, a, _bott, _hecke, orbifold) := deriveMonsterHash (name : String) 
-  let crt := getCrtFromShard shard 
-  return Json.mkObj [ 
-    ("name", Json.str (name : String)), 
-    ("erdfa:shard", Json.str shard), 
-    ("erdfa:crt", Json.str (toString crt)), 
-    ("dasl:addr", Json.str a), 
-    ("sheaf:orbifold", Json.str orbifold) 
+def hashOracle := GET "/api/erdfa/hash/{name}" (⟨name⟩ : Path String) => do
+  let (_t, shard, _p, a, _bott, _hecke, orbifold) := deriveMonsterHash (name : String)
+  let crt := getCrtFromShard shard
+  return Json.mkObj [
+    ("name", Json.str (name : String)),
+    ("erdfa:shard", Json.str shard),
+    ("erdfa:crt", Json.str (toString crt)),
+    ("dasl:addr", Json.str a),
+    ("sheaf:orbifold", Json.str orbifold)
   ]
 
 def index := GET "/" => do
