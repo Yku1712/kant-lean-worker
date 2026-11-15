@@ -22,11 +22,16 @@
         .success { color: #00ff00; }
         .exports { margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; }
     </style>
+    <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
 </head>
 <body>
     <h1>🟢 Kant Lean Worker Dashboard</h1>
     <div class="grid">
         <div class="card">
+            <h2>Wallet Connection</h2>
+            <p>Address: <span id="walletAddress">Not connected</span></p>
+            <button onclick="connectWallet()" style="margin-bottom: 10px; background: #9933ff; color: white;">Connect Phantom/Solflare</button>
+            <hr style="border-color: #333;">
             <h2>Node Status</h2>
             <p>Status: <span id="status">Loading...</span></p>
             <p>Sections: <span id="count">0</span></p>
@@ -65,6 +70,23 @@
     </div>
 
     <script>
+        async function connectWallet() {
+            try {
+                if (window.phantom?.solana?.isPhantom) {
+                    const resp = await window.phantom.solana.connect();
+                    document.getElementById('walletAddress').innerText = resp.publicKey.toString();
+                } else if (window.solflare) {
+                    await window.solflare.connect();
+                    document.getElementById('walletAddress').innerText = window.solflare.publicKey.toString();
+                } else {
+                    alert('Please install Phantom or Solflare wallet.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Connection failed.');
+            }
+        }
+
         async function loadData() {
             try {
                 const statusRes = await fetch('/api/erdfa/status');
