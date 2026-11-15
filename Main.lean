@@ -166,8 +166,13 @@ instance : FromJson SheafSection where
     let subgroupIndex ← j.getObjValAs? String "sheaf:subgroupIndex"
     return { cid, shard, prime, encoding, addr, dasl_type, eigenspace, bott, hecke, orbifold, subgroupIndex }
 
+def sanitizeFilename (name : String) : String :=
+  String.ofList (name.toList.map (fun c =>
+    if c == '?' || c == '*' || c == ':' || c == '<' || c == '>' || c == '|' || c == '"' || c == '\\' || c == '/' then '_' else c
+  ))
+
 def loadOrDerive (cid : String) : ContextAsync Json := do
-  let path := ("data" : System.FilePath) / s!"{cid}.json"
+  let path := ("data" : System.FilePath) / s!"{sanitizeFilename cid}.json"
   if ← System.FilePath.pathExists path then
     let content ← IO.FS.readFile path
     match Json.parse content with
@@ -244,7 +249,7 @@ def processSubmission (body : SheafSection) : ContextAsync (Status × Json) := d
   let incomingShard := String.intercalate "," (body.shard.map toString)
   let crtVal := getCrtFromShard incomingShard
   IO.FS.createDirAll "data"
-  let path := ("data" : System.FilePath) / s!"{body.cid}.json"
+  let path := ("data" : System.FilePath) / s!"{sanitizeFilename body.cid}.json"
 
   let newSectionJson := Json.mkObj [
     ("cid", Json.str body.cid),
