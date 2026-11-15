@@ -7,6 +7,7 @@ open Std.Http
 open Std.Async
 open Std.Http.Server
 open Lean
+open System (FilePath)
 
 structure Html where
   content : String
@@ -15,28 +16,6 @@ instance : IntoResponse Html where
   into_response html := do
     let h ← html
     Response.ok |>.header (.mk "content-type") (.mk "text/html; charset=utf-8") |>.header (.mk "access-control-allow-origin") (.mk "*") |>.text h.content
-
-structure CorsGetResponse where
-  dummy : Unit
-
-instance : IntoResponse CorsGetResponse where
-  into_response _ := do
-    Response.ok
-      |>.header (.mk "access-control-allow-origin") (.mk "*")
-      |>.header (.mk "access-control-allow-methods") (.mk "GET, OPTIONS")
-      |>.header (.mk "access-control-allow-headers") (.mk "Content-Type")
-      |>.text ""
-
-structure CorsPostResponse where
-  dummy : Unit
-
-instance : IntoResponse CorsPostResponse where
-  into_response _ := do
-    Response.ok
-      |>.header (.mk "access-control-allow-origin") (.mk "*")
-      |>.header (.mk "access-control-allow-methods") (.mk "POST, OPTIONS")
-      |>.header (.mk "access-control-allow-headers") (.mk "Content-Type")
-      |>.text ""
 
 def getSeed (cid : String) : Option (String × String × String × String × String × String × String) :=
   match cid with
@@ -160,13 +139,37 @@ def showSection := GET "/erdfa/{cid}" (⟨cid⟩ : Path String) => do
   return (show Html from { content := rdfaPayload (cid : String) })
 
 def showJson := GET "/api/erdfa/{cid}" (⟨cid⟩ : Path String) => do
-  return (jsonPayload (cid : String))
+  let path := ("data" : System.FilePath) / s!"{cid}.json"
+  if ← System.FilePath.pathExists path then
+    let content ← IO.FS.readFile path
+    match Json.parse content with
+    | .ok j => return j
+    | .error _ => return jsonPayload cid
+  else
+    return jsonPayload cid
 
 def submitSection := POST "/api/erdfa/submit" (⟨body⟩ : LeanIO.Json SheafSection) => do
   let crtVal := getCrtFromShard (String.intercalate "," (body.shard.map toString))
+  IO.FS.createDirAll "data"
+  let path := ("data" : System.FilePath) / s!"{body.cid}.json"
+  let j := Json.mkObj [
+    ("cid", Json.str body.cid),
+    ("erdfa:shard", Json.str (String.intercalate "," (body.shard.map toString))),
+    ("erdfa:crt", Json.str (toString crtVal)),
+    ("erdfa:encoding", Json.str body.encoding),
+    ("erdfa:prime", Json.str (toString body.prime)),
+    ("dasl:addr", Json.str body.addr),
+    ("dasl:type", Json.str body.dasl_type),
+    ("dasl:eigenspace", Json.str body.eigenspace),
+    ("dasl:bott", Json.str body.bott),
+    ("dasl:hecke", Json.str body.hecke),
+    ("sheaf:orbifold", Json.str body.orbifold),
+    ("sheaf:subgroupIndex", Json.str body.subgroupIndex)
+  ]
+  IO.FS.writeFile path (j.compress)
   return Json.mkObj [
     ("status", Json.str "ok"),
-    ("message", Json.str "SheafSection validated mathematically"),
+    ("message", Json.str "SheafSection validated and persisted mathematically"),
     ("cid", Json.str body.cid),
     ("crt", Json.str (toString crtVal))
   ]
