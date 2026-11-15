@@ -10,9 +10,10 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "desktop-app",
+        "title": "Kant Lean Worker",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "url": "http://192.168.68.120:8080/ui"
       }
     ],
     "security": {
