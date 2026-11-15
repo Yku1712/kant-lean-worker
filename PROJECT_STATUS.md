@@ -19,7 +19,7 @@ embedding (Gödel numbers), and distributed consensus.
 | Export (IPLD-ready) | ✅ | `/api/erdfa/export` returns full JSON array |
 | Health endpoint | ✅ | `/api/erdfa/status` |
 | Python integration demo | ✅ | `integrate.py` matches local hash vs Lean node |
-| E2E test suite | ✅ 15/15 | `./test.sh` |
+| E2E test suite | ✅ 17/17 | `./test.sh` |
 | CI (GitHub Actions) | ✅ | `.github/workflows/lean-test.yml` |
 | Reproducible env (Nix) | ✅ | `flake.nix` |
 
