@@ -247,6 +247,17 @@ def submitSection := POST "/api/erdfa/submit" (⟨body⟩ : LeanIO.Json SheafSec
       ("crt", Json.str (toString crtVal))
     ])
 
+def hashOracle := GET "/api/erdfa/hash/{name}" (⟨name⟩ : Path String) => do 
+  let (_t, shard, _p, a, _bott, _hecke, orbifold) := deriveMonsterHash (name : String) 
+  let crt := getCrtFromShard shard 
+  return Json.mkObj [ 
+    ("name", Json.str (name : String)), 
+    ("erdfa:shard", Json.str shard), 
+    ("erdfa:crt", Json.str (toString crt)), 
+    ("dasl:addr", Json.str a), 
+    ("sheaf:orbifold", Json.str orbifold) 
+  ]
+
 def index := GET "/" => do
   return "lean-worker ERDFa/Sheaf: try GET /erdfa/{cid} or /api/erdfa/{cid}"
 
@@ -255,6 +266,7 @@ def main : IO Unit := Async.block do
     |>.addRoute showSection 
     |>.addRoute showJson 
     |>.addRoute listAll
+    |>.addRoute hashOracle
     |>.addRoute submitSection 
     |>.addRoute index
   let addr := .v4 ⟨.ofParts 0 0 0 0, 8080⟩

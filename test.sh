@@ -104,3 +104,8 @@ status=$(curl -sS -o /tmp/.out -w "%{http_code}" --max-time 5 -X POST "$BASE/api
   -d '{"cid":"test_consensus_002","erdfa:shard":"5,10,16","erdfa:prime":"1","erdfa:encoding":"raw","dasl:addr":"0xda51500000000000","dasl:type":"5","dasl:eigenspace":"Earth","dasl:bott":"1 (C)","dasl:hecke":"T_13","sheaf:orbifold":"(5 mod 71, 10 mod 59, 16 mod 47)","sheaf:subgroupIndex":"erdfa:H/raw"}')
 check_status "contradiction returns 422" "422" "$status"
 check_contains "status contradiction" '"status": "contradiction"' "$(cat /tmp/.out)"
+
+echo "=== 13. Hash Oracle ==="
+out=$(curl -sS --max-time 5 "$BASE/api/erdfa/hash/test_theory")
+check_contains "hash oracle shard" '"erdfa:shard": "11,30,8"' "$out"
+check_contains "hash oracle crt" '"erdfa:crt": "86347"' "$out"
