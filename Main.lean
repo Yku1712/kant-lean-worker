@@ -126,9 +126,20 @@ instance : FromJson SheafSection where
       if orbifold != expectedOrb then
         throw s!"Mathematical mismatch: orbifold is {orbifold}, expected {expectedOrb}"
     | _ => throw "Invalid shard length"
+    
     let encoding ← j.getObjValAs? String "erdfa:encoding"
     let addr ← j.getObjValAs? String "dasl:addr"
     let dasl_type ← j.getObjValAs? String "dasl:type"
+    
+    -- DA51 Structural Validation
+    if !addr.startsWith "0xda51" then
+      throw "dasl:addr must start with prefix 0xda51"
+    if addr.length != 18 then
+      throw "dasl:addr must be exactly 18 characters (0x + 16 hex)"
+    let addrTypeChar := match (addr.toList.drop 6).head? with | some c => c.toString | none => ""
+    if addrTypeChar != dasl_type then
+      throw s!"DA51 Type mismatch: addr prefix has type '{addrTypeChar}', but dasl:type is '{dasl_type}'"
+      
     let eigenspace ← j.getObjValAs? String "dasl:eigenspace"
     let bott ← j.getObjValAs? String "dasl:bott"
     let hecke ← j.getObjValAs? String "dasl:hecke"
