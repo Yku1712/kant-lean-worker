@@ -33,6 +33,7 @@ and **persistent local knowledge base** for Sheaf Sections.
 | `GET`  | `/api/erdfa/hash/{name}` | Hash oracle: derive shard + CRT from a name via `monsterHash`. |
 | `POST` | `/api/erdfa/submit` | Validate + compute CRT + persist (returns created/confirmed/contradiction). |
 | `POST` | `/api/erdfa/sync` | Batch sync: accepts a JSON array of SheafSections. |
+| `GET`  | `/api/erdfa/filter/{field}={value}` | Property-based filter over all sections. |
 | `GET`  | `/` | Plain-text index. |
 
 ## Test suite
@@ -46,4 +47,9 @@ eof
 ## Live Demo Output
 
 ### E2E test suite (`./test.sh` — 13/13 passing)
+
+
+
+## Quick Start
+
 
