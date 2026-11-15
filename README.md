@@ -65,6 +65,19 @@ Requires the server running on 127.0.0.1:8080.
 
 `integrate.py` demonstrates that a pure-Python reimplementation of `monsterHash` produces identical shard coordinates as the Lean node, plus the full submit → confirm → contradict consensus cycle.
 
+
+## IPFS / DAG-CBOR Bridge
+
+The Lean node can export its entire knowledge base as a DAG-CBOR block, ready for IPFS ingestion:
+
+    python3 ipfs_bridge.py
+
+This fetches all sections from GET /api/erdfa/export, encodes them using cbor2, and writes lean_export.cbor. The file can then be published to IPFS:
+
+    ipfs dag put --store-codec dag-cbor --input-codec dag-cbor lean_export.cbor
+
+This bridges the Lean formal validation layer directly to the Rust erdfa-publish IPFS storage layer.
+
 ## Known limits
 
 - The Rust `nested_cid` derivation uses SHA-256, not available in Lean 4.33.0 std. The Lean node uses `monsterHash` as its canonical hash. The CRT / sheaf / consensus layer is hash-agnostic.
