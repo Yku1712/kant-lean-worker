@@ -68,7 +68,7 @@ Requires the server running on 127.0.0.1:8080.
 ## Known limits
 
 - The Rust `nested_cid` derivation uses SHA-256, not available in Lean 4.33.0 std. The Lean node uses `monsterHash` as its canonical hash. The CRT / sheaf / consensus layer is hash-agnostic.
-- ' + bt + 'OPTIONS' + bt + ' CORS preflight is not routed: leanio's OPTIONS macro has a known limitation. Server-to-server only.
+- `OPTIONS` CORS preflight is not routed: leanio's OPTIONS macro has a known limitation. Server-to-server only.
 
 ## Tech Stack
 
