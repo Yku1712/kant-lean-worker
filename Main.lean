@@ -287,6 +287,29 @@ def exportAll := GET "/api/erdfa/export" => do
       | .error _ => pure () 
   return Json.arr sections
 
+def statusEndpoint := GET "/api/erdfa/status" => do 
+  let dir := ("data" : System.FilePath) 
+  let mut count : Nat := 0 
+  if ← System.FilePath.pathExists dir then 
+    let entries ← dir.readDir 
+    for entry in entries do 
+      if entry.fileName.endsWith ".json" then count := count + 1 
+  return Json.mkObj [ 
+    ("status", Json.str "healthy"), 
+    ("node", Json.str "kant-lean-worker"), 
+    ("version", Json.str "0.1.0"), 
+    ("sections_count", Json.num count), 
+    ("endpoints", Json.arr #[ 
+      Json.str "/erdfa/{cid}", 
+      Json.str "/api/erdfa/{cid}", 
+      Json.str "/api/erdfa/list", 
+      Json.str "/api/erdfa/export", 
+      Json.str "/api/erdfa/status", 
+      Json.str "/api/erdfa/hash/{name}", 
+      Json.str "/api/erdfa/submit" 
+    ]) 
+  ]
+
 def index := GET "/" => do
   return "lean-worker ERDFa/Sheaf: try GET /erdfa/{cid} or /api/erdfa/{cid}"
 
@@ -297,6 +320,7 @@ def main : IO Unit := Async.block do
     |>.addRoute listAll
     |>.addRoute hashOracle
     |>.addRoute exportAll
+    |>.addRoute statusEndpoint
     |>.addRoute submitSection 
     |>.addRoute index
   let addr := .v4 ⟨.ofParts 0 0 0 0, 8080⟩
