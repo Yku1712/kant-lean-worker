@@ -16,13 +16,34 @@ instance : IntoResponse Html where
     let h ← html
     Response.ok |>.header (.mk "content-type") (.mk "text/html; charset=utf-8") |>.header (.mk "access-control-allow-origin") (.mk "*") |>.text h.content
 
+structure CorsGetResponse where
+  dummy : Unit
+
+instance : IntoResponse CorsGetResponse where
+  into_response _ := do
+    Response.ok
+      |>.header (.mk "access-control-allow-origin") (.mk "*")
+      |>.header (.mk "access-control-allow-methods") (.mk "GET, OPTIONS")
+      |>.header (.mk "access-control-allow-headers") (.mk "Content-Type")
+      |>.text ""
+
+structure CorsPostResponse where
+  dummy : Unit
+
+instance : IntoResponse CorsPostResponse where
+  into_response _ := do
+    Response.ok
+      |>.header (.mk "access-control-allow-origin") (.mk "*")
+      |>.header (.mk "access-control-allow-methods") (.mk "POST, OPTIONS")
+      |>.header (.mk "access-control-allow-headers") (.mk "Content-Type")
+      |>.text ""
+
 def getSeed (cid : String) : Option (String × String × String × String × String × String × String) :=
   match cid with
   | "bafkda5131928007593a" => some ("0", "62,43,36", "1", "0xda5101480007593a", "1 (C)", "T_13", "(62 mod 71, 43 mod 59, 36 mod 47)")
   | "bafkda5130a0825c7afe" => some ("6", "2,13,34", "1", "0xda5161a8025c7afe", "5 (C(4))", "T_17", "(2 mod 71, 13 mod 59, 34 mod 47)")
   | _ => none
 
--- Mike's exact monsterHash algorithm from Crankmining.lean
 def deriveMonsterHash (name : String) : String × String × String × String × String × String × String :=
   let len := name.length
   let charSum := name.toList.foldl (fun (acc : Nat) c => acc + c.toNat) 0
@@ -150,11 +171,23 @@ def submitSection := POST "/api/erdfa/submit" (⟨body⟩ : LeanIO.Json SheafSec
     ("crt", Json.str (toString crtVal))
   ]
 
+def corsGet := OPTIONS "/api/erdfa/{cid}" (⟨_cid⟩ : Path String) => do
+  return (show CorsGetResponse from { dummy := () })
+
+def corsSubmit := OPTIONS "/api/erdfa/submit" => do
+  return (show CorsPostResponse from { dummy := () })
+
 def index := GET "/" => do
   return "lean-worker ERDFa/Sheaf: try GET /erdfa/{cid} or /api/erdfa/{cid}"
 
 def main : IO Unit := Async.block do
-  let router := Router.empty |>.addRoute showSection |>.addRoute showJson |>.addRoute submitSection |>.addRoute index
+  let router := Router.empty 
+    |>.addRoute showSection 
+    |>.addRoute showJson 
+    |>.addRoute submitSection 
+    |>.addRoute corsGet
+    |>.addRoute corsSubmit
+    |>.addRoute index
   let addr := .v4 ⟨.ofParts 0 0 0 0, 8080⟩
   let server ← router.serve addr
   IO.println "lean-worker on http://127.0.0.1:8080"
