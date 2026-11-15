@@ -54,6 +54,10 @@
             <p>User Credits: <span id="userCredits" class="success">0</span></p>
             <p>Node Credits: <span id="nodeCredits" class="success">0</span></p>
             <button onclick="stakeCredits()" class="btn-green">Stake +50 Credits</button>
+            <hr style="border-color: #333; margin: 15px 0;">
+            <input type="number" id="withdrawAmount" placeholder="Amount to withdraw" style="margin-bottom: 5px;">
+            <button onclick="withdrawCredits()" class="btn-orange" style="background:#ff9900; color:black;">Withdraw to Solana</button>
+            <div id="withdrawResult" class="success" style="font-size: 0.8em; margin-top:5px; word-break: break-all;"></div>
         </div>
     </div>
 
@@ -206,6 +210,32 @@
                 }
             } catch (e) {
                 res.innerHTML = `<span class="error">Network error</span>`;
+            }
+        }
+
+        async function withdrawCredits() {
+            const amount = document.getElementById('withdrawAmount').value;
+            const resDiv = document.getElementById('withdrawResult');
+            if (!amount || amount <= 0) return alert("Enter a valid amount");
+            
+            resDiv.innerText = "Processing...";
+            resDiv.style.color = "#00ffff";
+            
+            try {
+                const resp = await fetch(`/api/erdfa/withdraw/default_user:${amount}`, { method: 'POST' });
+                const data = await resp.json();
+                
+                if (resp.ok) {
+                    resDiv.innerHTML = `✅ Withdrawn! Receipt: <br><span style="font-size:0.8em;">${data.receipt}</span>`;
+                    resDiv.style.color = "#00ff00";
+                    loadData();
+                } else {
+                    resDiv.innerHTML = `❌ ${data.error}`;
+                    resDiv.style.color = "#ff4444";
+                }
+            } catch (e) {
+                resDiv.innerText = "Network error.";
+                resDiv.style.color = "#ff4444";
             }
         }
 

@@ -454,6 +454,29 @@ def stakeRoute := POST "/api/erdfa/stake/{req}" (⟨req⟩ : Path String) => do
     return (Status.ok, Json.mkObj [("status", Json.str "staked"), ("address", Json.str w.address), ("credits", Json.num w.credits)])
   | _ => return (Status.badRequest, Json.mkObj [("error", Json.str "Invalid format. Use address:amount")])
 
+
+def withdrawRoute := POST "/api/erdfa/withdraw/{req}" (⟨req⟩ : Path String) => do
+  let parts := (req : String).splitOn ":"
+  match parts with
+  | [addr, amountStr] =>
+    let amount := match amountStr.toNat? with | some n => n | none => 0
+    let w ← loadWallet addr
+    if w.credits >= amount && amount > 0 then
+      let new_w := { w with credits := w.credits - amount }
+      saveWallet new_w
+      addCredits "lean_node_worker" amount -- Transferăm în trezoreria nodului
+      let receipt := s!"0xwithdraw_{addr}_{amount}_{w.credits}_sol"
+      return (Status.ok, Json.mkObj [
+        ("status", Json.str "withdrawn"),
+        ("address", Json.str addr),
+        ("amount", Json.num amount),
+        ("remaining_credits", Json.num new_w.credits),
+        ("receipt", Json.str receipt)
+      ])
+    else
+      return (Status.badRequest, Json.mkObj [("error", Json.str "Insufficient credits or invalid amount")])
+  | _ => return (Status.badRequest, Json.mkObj [("error", Json.str "Invalid format. Use address:amount")])
+
 def index := GET "/" => do
   return "lean-worker ERDFa/Sheaf: try GET /erdfa/{cid} or /api/erdfa/{cid}"
 
@@ -472,6 +495,7 @@ def main : IO Unit := Async.block do
     |>.addRoute filterSections
     |>.addRoute getWalletRoute
     |>.addRoute stakeRoute
+    |>.addRoute withdrawRoute
     |>.addRoute index
   let addr := .v4 ⟨.ofParts 0 0 0 0, 8080⟩
   let server ← router.serve addr
