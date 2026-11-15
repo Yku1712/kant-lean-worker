@@ -78,6 +78,11 @@ This fetches all sections from GET /api/erdfa/export, encodes them using cbor2, 
 
 This bridges the Lean formal validation layer directly to the Rust erdfa-publish IPFS storage layer.
 
+
+## Web UI
+
+Open `http://127.0.0.1:8080/ui` in a browser to access the dashboard.
+
 ## Known limits
 
 - The Rust `nested_cid` derivation uses SHA-256, not available in Lean 4.33.0 std. The Lean node uses `monsterHash` as its canonical hash. The CRT / sheaf / consensus layer is hash-agnostic.
