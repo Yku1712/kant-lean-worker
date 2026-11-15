@@ -171,12 +171,6 @@ def submitSection := POST "/api/erdfa/submit" (⟨body⟩ : LeanIO.Json SheafSec
     ("crt", Json.str (toString crtVal))
   ]
 
-def corsGet := OPTIONS "/api/erdfa/{cid}" (⟨_cid⟩ : Path String) => do
-  return (show CorsGetResponse from { dummy := () })
-
-def corsSubmit := OPTIONS "/api/erdfa/submit" => do
-  return (show CorsPostResponse from { dummy := () })
-
 def index := GET "/" => do
   return "lean-worker ERDFa/Sheaf: try GET /erdfa/{cid} or /api/erdfa/{cid}"
 
@@ -185,8 +179,6 @@ def main : IO Unit := Async.block do
     |>.addRoute showSection 
     |>.addRoute showJson 
     |>.addRoute submitSection 
-    |>.addRoute corsGet
-    |>.addRoute corsSubmit
     |>.addRoute index
   let addr := .v4 ⟨.ofParts 0 0 0 0, 8080⟩
   let server ← router.serve addr
