@@ -26,6 +26,7 @@ else
     exit 1
 fi
 chmod +x "$INSTALL_DIR/lean-worker"
+cp "./ui.html" "$INSTALL_DIR/"
 
 # 2. Migram datele existente (daca exista)
 if [ -d "./data" ]; then
