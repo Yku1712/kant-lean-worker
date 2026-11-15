@@ -40,7 +40,20 @@ Implements **Zero Trust** validation, **CRT-based numeric embedding** (Gödel nu
 | `POST` | `/api/erdfa/sync` | Batch sync: accepts a JSON array of SheafSections. |
 | `GET`  | `/` | Plain-text index. |
 
-## Quick Start
+## One-Click Installation (No Programming Knowledge Required)
+
+For users who just want to run the node without dealing with compilers or dependencies:
+
+
+This will:
+1. Install the pre-compiled binary to `~/.kant-lean-worker/`.
+2. Register a user-level `systemd` service (starts automatically on boot).
+3. Install a CLI wrapper command: `kant-lean-worker`.
+
+Useful commands:
+Then simply open your browser at `http://localhost:8080/ui`.
+
+## Quick Start (For Developers)
 
 ```
 lake build

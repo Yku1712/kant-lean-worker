@@ -22,6 +22,7 @@ embedding (Gödel numbers), and distributed consensus.
 | E2E test suite | ✅ 17/17 | `./test.sh` |
 | CI (GitHub Actions) | ✅ | `.github/workflows/lean-test.yml` |
 | Reproducible env (Nix) | ✅ | `flake.nix` |
+| One-Click Installer | ✅ |install.sh(systemd + CLI) |
 
 ## Formal proofs (`SheafAxioms.lean`)
 
