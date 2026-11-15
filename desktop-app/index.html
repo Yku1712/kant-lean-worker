@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kant Lean Worker</title>
+    <style>
+        body { font-family: monospace; background: #0a0a0a; color: #00ff00; padding: 20px; }
+        h1 { color: #fff; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { border: 1px solid #333; padding: 15px; border-radius: 8px; background: #111; }
+        .card h2 { margin-top: 0; color: #00ffff; font-size: 1.2em; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { text-align: left; padding: 8px; border-bottom: 1px solid #333; }
+        th { color: #888; }
+        button, .btn { background: #00ff00; color: #000; border: none; padding: 8px 16px; cursor: pointer; font-weight: bold; border-radius: 4px; text-decoration: none; display: inline-block; font-size: 0.9em; }
+        button:hover, .btn:hover { background: #00cc00; }
+        .btn-alt { background: #00ffff; }
+        .btn-alt:hover { background: #00cccc; }
+        input { width: 100%; background: #222; color: #00ff00; border: 1px solid #444; padding: 8px; margin-bottom: 10px; font-family: monospace; box-sizing: border-box; }
+        .error { color: #ff0000; }
+        .success { color: #00ff00; }
+        .exports { margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; }
+    </style>
+</head>
+<body>
+    <h1>🟢 Kant Lean Worker Dashboard</h1>
+    <div class="grid">
+        <div class="card">
+            <h2>Node Status</h2>
+            <p>Status: <span id="status">Loading...</span></p>
+            <p>Sections: <span id="count">0</span></p>
+            <button onclick="loadData()">Refresh</button>
+        </div>
+        <div class="card">
+            <h2>Submit New Theory</h2>
+            <p style="font-size:0.8em; color:#888; margin-top:0;">Generates a full SheafSection via monsterHash, validates, and persists.</p>
+            <input type="text" id="theoryName" placeholder="Theory Name (e.g. crank_alpha)">
+            <button onclick="submitTheory()">Hash, Validate & Submit</button>
+            <div id="submitResult" style="margin-top:10px;"></div>
+        </div>
+    </div>
+    
+    <div class="card" style="margin-top: 20px;">
+        <h2>Export Knowledge Base</h2>
+        <div class="exports">
+            <a href="/api/erdfa/export" target="_blank" class="btn btn-alt">Export JSON</a>
+            <a href="/api/erdfa/export/jsonld" target="_blank" class="btn btn-alt">Export JSON-LD</a>
+            <a href="/api/erdfa/export/xml" target="_blank" class="btn btn-alt">Export XML</a>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top: 20px;">
+        <h2>Knowledge Base (Latest)</h2>
+        <table>
+            <thead><tr><th>CID</th><th>Shard</th><th>CRT (Gödel)</th><th>Eigenspace</th></tr></thead>
+            <tbody id="kbTable"></tbody>
+        </table>
+    </div>
+
+    <script>
+        async function loadData() {
+            try {
+                const statusRes = await fetch('/api/erdfa/status');
+                const statusData = await statusRes.json();
+                document.getElementById('status').innerText = statusData.status;
+                document.getElementById('count').innerText = statusData.sections_count;
+
+                const listRes = await fetch('/api/erdfa/export');
+                const listData = await listRes.json();
+                const tbody = document.getElementById('kbTable');
+                tbody.innerHTML = '';
+                listData.reverse().slice(0, 15).forEach(s => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td>${s.cid}</td><td>${s['erdfa:shard']}</td><td>${s['erdfa:crt']}</td><td>${s['dasl:eigenspace']}</td>`;
+                    tbody.appendChild(tr);
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function submitTheory() {
+            const name = document.getElementById('theoryName').value.trim();
+            if (!name) return alert("Enter a theory name");
+            
+            const res = document.getElementById('submitResult');
+            res.innerHTML = "Hashing...";
+            
+            try {
+                const hashRes = await fetch('/api/erdfa/hash/' + encodeURIComponent(name));
+                const hashData = await hashRes.json();
+                
+                // Construct a valid 18-char DA51 address (Type 0)
+                const pad = Math.random().toString(16).slice(2, 13).padEnd(11, '0');
+                const addr = "0xda510" + pad;
+                
+                const payload = {
+                    "cid": "theory_" + name,
+                    "erdfa:shard": hashData["erdfa:shard"],
+                    "erdfa:prime": "1",
+                    "erdfa:encoding": "raw",
+                    "dasl:addr": addr,
+                    "dasl:type": "0",
+                    "dasl:eigenspace": "Earth",
+                    "dasl:bott": "0 (R)",
+                    "dasl:hecke": "T_2",
+                    "sheaf:orbifold": hashData["sheaf:orbifold"],
+                    "sheaf:subgroupIndex": "erdfa:H/raw"
+                };
+                
+                const submitRes = await fetch('/api/erdfa/submit', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const submitData = await submitRes.json();
+                
+                if (submitRes.ok) {
+                    res.innerHTML = `<span class="success">Success: ${submitData.status.toUpperCase()} (CRT: ${submitData.crt})</span>`;
+                    document.getElementById('theoryName').value = '';
+                    loadData();
+                } else {
+                    res.innerHTML = `<span class="error">Error: ${submitData.message || submitData}</span>`;
+                }
+            } catch (e) {
+                res.innerHTML = `<span class="error">Network error</span>`;
+            }
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
