@@ -148,6 +148,24 @@ def showJson := GET "/api/erdfa/{cid}" (⟨cid⟩ : Path String) => do
   else
     return jsonPayload cid
 
+def listAll := GET "/api/erdfa/list" => do
+  let dir := ("data" : System.FilePath)
+  if !(← System.FilePath.pathExists dir) then
+    return Json.mkObj [("count", Json.num 0), ("sections", Json.arr #[])]
+  let entries ← dir.readDir
+  let mut sections : Array Json := #[]
+  for entry in entries do
+    let name := entry.fileName
+    if name.endsWith ".json" then
+      let content ← IO.FS.readFile entry.path
+      match Json.parse content with
+      | .ok j =>
+        let cid := match j.getObjValAs? String "cid" with | .ok c => c | .error _ => ""
+        let crt := match j.getObjValAs? String "erdfa:crt" with | .ok c => c | .error _ => ""
+        sections := sections.push (Json.mkObj [("cid", Json.str cid), ("crt", Json.str crt)])
+      | .error _ => pure ()
+  return Json.mkObj [("count", Json.num sections.size), ("sections", Json.arr sections)]
+
 def submitSection := POST "/api/erdfa/submit" (⟨body⟩ : LeanIO.Json SheafSection) => do
   let crtVal := getCrtFromShard (String.intercalate "," (body.shard.map toString))
   IO.FS.createDirAll "data"
@@ -181,6 +199,7 @@ def main : IO Unit := Async.block do
   let router := Router.empty 
     |>.addRoute showSection 
     |>.addRoute showJson 
+    |>.addRoute listAll
     |>.addRoute submitSection 
     |>.addRoute index
   let addr := .v4 ⟨.ofParts 0 0 0 0, 8080⟩
