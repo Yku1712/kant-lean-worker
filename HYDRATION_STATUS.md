@@ -8,7 +8,7 @@ Following the "Definition of Done: The Hydrated Form of a Declared Function".
 | B | CI/CD Build | ✅ | GitHub Actions (`.github/workflows/`) |
 | A | Build Artifact | ✅ | `lake build` → `.olean` + native binary |
 | S | Static CDN | ⚠️ | Exports via `/api/erdfa/export` (JSON/XML/JSON-LD) |
-| W | WASM Edge | ⏳ | Future: Lean 4 → WASM (not yet ported) |
+| W | WASM Edge | ⏳ | Future: Lean 4 → WASM. IPFS bridge ready (ipfs_bridge.py). |
 | C | Client-Side Exec | ❌ | N/A: Server-to-server design |
 | I | CLI / cURL | ✅ | REST API + `Makefile` + `test.sh` |
 | D | systemd Services | ✅ | `kant-lean-worker.service` |
@@ -22,4 +22,4 @@ Following the "Definition of Done: The Hydrated Form of a Declared Function".
 
 `DONE(f) = Declared(f) ∧ Hydrated(f)`
 
-Current score: **7/13 hydrated** (5 explicit, 2 N/A).
+Current score: **9/13 hydrated** (7 explicit, 2 N/A).
