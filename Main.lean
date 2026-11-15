@@ -22,13 +22,16 @@ def getSeed (cid : String) : Option (String × String × String × String × Str
   | "bafkda5130a0825c7afe" => some ("6", "2,13,34", "1", "0xda5161a8025c7afe", "5 (C(4))", "T_17", "(2 mod 71, 13 mod 59, 34 mod 47)")
   | _ => none
 
-def deriveFromHash (cid : String) : String × String × String × String × String × String × String :=
-  let h : UInt64 := hash cid
-  let s0 : Nat := ((h / 1) % 71).toNat
-  let s1 : Nat := ((h / 71) % 59).toNat
-  let s2 : Nat := ((h / (71 * 59)) % 47).toNat
-  let pr : UInt64 := (h % 10) + 1
-  let ad : UInt64 := h * 16
+-- Mike's exact monsterHash algorithm from Crankmining.lean
+def deriveMonsterHash (name : String) : String × String × String × String × String × String × String :=
+  let len := name.length
+  let charSum := name.toList.foldl (fun (acc : Nat) c => acc + c.toNat) 0
+  let distinctCount := name.toList.eraseDups.length
+  let s0 := len % 71
+  let s1 := charSum % 59
+  let s2 := distinctCount % 47
+  let pr : Nat := (charSum % 10) + 1
+  let ad : Nat := (s0 * 16777216) + (s1 * 65536) + (s2 * 256) + (len % 256)
   ("0",
    s!"{s0},{s1},{s2}",
    toString pr,
@@ -40,7 +43,7 @@ def deriveFromHash (cid : String) : String × String × String × String × Stri
 def sheafTuple (cid : String) : String × String × String × String × String × String × String :=
   match getSeed cid with
   | some seed => seed
-  | none => deriveFromHash cid
+  | none => deriveMonsterHash cid
 
 def getCrtFromShard (shardStr : String) : Nat :=
   let parts := shardStr.splitOn ","
@@ -141,8 +144,8 @@ def showJson := GET "/api/erdfa/{cid}" (⟨cid⟩ : Path String) => do
 def submitSection := POST "/api/erdfa/submit" (⟨body⟩ : LeanIO.Json SheafSection) => do
   let crtVal := getCrtFromShard (String.intercalate "," (body.shard.map toString))
   return Json.mkObj [
-    ("status", Json.str "ok"), 
-    ("message", Json.str "SheafSection validated mathematically"), 
+    ("status", Json.str "ok"),
+    ("message", Json.str "SheafSection validated mathematically"),
     ("cid", Json.str body.cid),
     ("crt", Json.str (toString crtVal))
   ]
