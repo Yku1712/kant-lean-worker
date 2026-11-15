@@ -1,0 +1,15 @@
+[Unit]
+Description=Kant Lean Worker (Solfunmeme / ERDFa Node)
+After=network.target
+
+[Service]
+Type=simple
+User=zos
+WorkingDirectory=/opt/kant-lean-worker
+ExecStart=/opt/kant-lean-worker/.lake/build/bin/lean-worker
+Restart=always
+RestartSec=3
+Environment="PORT=8080"
+
+[Install]
+WantedBy=multi-user.target
