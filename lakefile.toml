@@ -10,6 +10,15 @@ rev = "main"
 [[lean_lib]]
 name = "SheafAxioms"
 
+[[lean_lib]]
+name = "Governance"
+
+[[lean_lib]]
+name = "Senate"
+
+[[lean_lib]]
+name = "NewJerseyLLC"
+
 [[lean_exe]]
 name = "lean-worker"
 root = "Main"
