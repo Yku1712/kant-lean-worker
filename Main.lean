@@ -506,39 +506,21 @@ def getWalletRoute := GET "/api/erdfa/wallet/{addr}" (⟨addr⟩ : Path String) 
   let w ← loadWallet (addr : String)
   return Json.mkObj [("address", Json.str w.address), ("credits", Json.num w.credits)]
 
-def stakeRoute := POST "/api/erdfa/stake/{req}" (⟨req⟩ : Path String) => do
-  let parts := (req : String).splitOn ":"
-  match parts with
-  | [addr, amount] =>
-    let amt := match amount.toNat? with | some n => n | none => 0
-    addCredits addr amt
-    let w ← loadWallet addr
-    return (Status.ok, Json.mkObj [("status", Json.str "staked"), ("address", Json.str w.address), ("credits", Json.num w.credits)])
-  | _ => return (Status.badRequest, Json.mkObj [("error", Json.str "Invalid format. Use address:amount")])
+def stakeRoute := POST "/api/erdfa/stake/{req}" (⟨_req⟩ : Path String) => do
+  -- Security hold: no unauthenticated credit issuance.
+  -- Re-enable only after a reviewed authorization contract exists.
+  return (Status.forbidden, Json.mkObj [
+    ("status", Json.str "DENIED"),
+    ("error", Json.str "Credit staking is disabled pending authorization review")
+  ])
 
-
-def withdrawRoute := POST "/api/erdfa/withdraw/{req}" (⟨req⟩ : Path String) => do
-  let parts := (req : String).splitOn ":"
-  match parts with
-  | [addr, amountStr] =>
-    let amount := match amountStr.toNat? with | some n => n | none => 0
-    let w ← loadWallet addr
-    if w.credits >= amount && amount > 0 then
-      let new_w := { w with credits := w.credits - amount }
-      saveWallet new_w
-      addCredits "lean_node_worker" amount -- Transferăm în trezoreria nodului
-      let receipt := s!"0xwithdraw_{addr}_{amount}_{w.credits}_sol"
-      return (Status.ok, Json.mkObj [
-        ("status", Json.str "withdrawn"),
-        ("address", Json.str addr),
-        ("amount", Json.num amount),
-        ("remaining_credits", Json.num new_w.credits),
-        ("receipt", Json.str receipt)
-      ])
-    else
-      return (Status.badRequest, Json.mkObj [("error", Json.str "Insufficient credits or invalid amount")])
-  | _ => return (Status.badRequest, Json.mkObj [("error", Json.str "Invalid format. Use address:amount")])
-
+def withdrawRoute := POST "/api/erdfa/withdraw/{req}" (⟨_req⟩ : Path String) => do
+  -- Security hold: no unauthenticated credit transfers.
+  -- Re-enable only after a reviewed authorization contract exists.
+  return (Status.forbidden, Json.mkObj [
+    ("status", Json.str "DENIED"),
+    ("error", Json.str "Credit withdrawal is disabled pending authorization review")
+  ])
 
 def voteRoute := POST "/api/erdfa/vote/{req}" (⟨req⟩ : Path String) => do
   let parts := (req : String).splitOn ":"
