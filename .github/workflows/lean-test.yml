@@ -2,28 +2,62 @@ name: Lean Worker CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
   pull_request:
-    branches: [ "main" ]
+    branches:
+      - main
+      - review/unified-dao-governance-20261117
+      - review/dao-credit-failclosed-20261117
+
+permissions:
+  contents: read
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Install elan
+
+      - name: Install Lean toolchain
         run: |
-          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
-          echo "$HOME/.elan/bin" >> $GITHUB_PATH
-          
-      - name: Build Lean project
-        run: lake build
-        
-      - name: Run server in background
+          set -euo pipefail
+          curl -fsSL \
+            https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            | sh -s -- -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Build Lean Worker
         run: |
-          nohup lake exe lean-worker > server.log 2>&1 &
-          sleep 3
-          
-      - name: Run E2E test suite
-        run: ./test.sh
+          set -euo pipefail
+          lake build
+          test -x .lake/build/bin/lean-worker
+
+      - name: Run synthetic E2E in temporary workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          WORK="$(mktemp -d "${RUNNER_TEMP:-/tmp}/kant-ci.XXXXXXXX")"
+          trap 'rm -rf -- "$WORK"' EXIT
+
+          git archive HEAD | tar -xf - -C "$WORK"
+
+          mkdir -p "$WORK/.lake/build/bin" "$WORK/data/wallets"
+
+          cp .lake/build/bin/lean-worker \
+            "$WORK/.lake/build/bin/lean-worker"
+
+          chmod 700 "$WORK/.lake/build/bin/lean-worker"
+
+          printf '{"address":"default_user","credits":30}\n' \
+            > "$WORK/data/wallets/default_user.json"
+
+          printf '[]\n' > "$WORK/authorized_wallets.json"
+
+          (
+            cd "$WORK"
+            python3 tests/safe_e2e.py
+          )
