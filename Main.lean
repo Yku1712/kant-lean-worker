@@ -408,41 +408,19 @@ def processSubmission (body : SheafSection) : ContextAsync (Status × Json) := d
       ("crt", Json.str (toString crtVal))
     ])
 
-def submitSection := POST "/api/erdfa/submit" (⟨body⟩ : LeanIO.Json SheafSection) => do
-  -- Taxa de rețea (Network Fee) pentru validare
-  let fee := 5
-  let user_wallet := "default_user"
-  let has_funds ← deductCredits user_wallet fee
-  if !has_funds then
-    return (Status.paymentRequired, Json.mkObj [("error", Json.str "Insufficient Service Credits. Please stake to earn more.")])
+def submitSection := POST "/api/erdfa/submit"
+    (⟨_body⟩ : LeanIO.Json SheafSection) => do
+  return (Status.forbidden, Json.mkObj [
+    ("status", Json.str "DENIED"),
+    ("error", Json.str "Economic admission disabled pending transactional authority")
+  ])
 
-  let (status, js) ← processSubmission body
-
-  -- Dacă a fost validat cu succes (created/confirmed), nodul primește recompensa (Proof of Succinct Work)
-  let statusStr := match js.getObjValAs? String "status" with | .ok s => s | .error _ => ""
-  if statusStr == "created" || statusStr == "confirmed" then
-    addCredits "lean_node_worker" fee
-  -- Dacă a fost contradicție, creditele sunt arse (nu se adaugă nimănui)
-
-  return (status, js)
-
-def syncSection := POST "/api/erdfa/sync" (⟨body⟩ : LeanIO.Json (Array SheafSection)) => do
-  let mut created := 0
-  let mut confirmed := 0
-  let mut contradictions := 0
-  for item in body do
-    let (_status, js) ← processSubmission item
-    let statusStr := match js.getObjValAs? String "status" with | .ok s => s | .error _ => ""
-    if statusStr == "created" then created := created + 1
-    else if statusStr == "confirmed" then confirmed := confirmed + 1
-    else if statusStr == "contradiction" then contradictions := contradictions + 1
-  return Json.mkObj [
-    ("status", Json.str "sync_complete"),
-    ("created", Json.num created),
-    ("confirmed", Json.num confirmed),
-    ("contradictions", Json.num contradictions),
-    ("total", Json.num (created + confirmed + contradictions))
-  ]
+def syncSection := POST "/api/erdfa/sync"
+    (⟨_body⟩ : LeanIO.Json (Array SheafSection)) => do
+  return (Status.forbidden, Json.mkObj [
+    ("status", Json.str "DENIED"),
+    ("error", Json.str "Unauthenticated sync disabled pending authorization review")
+  ])
 
 def hashOracle := GET "/api/erdfa/hash/{name}" (⟨name⟩ : Path String) => do
   let (_t, shard, _p, a, _bott, _hecke, orbifold) := deriveMonsterHash (name : String)
