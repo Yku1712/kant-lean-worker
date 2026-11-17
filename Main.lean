@@ -1,6 +1,7 @@
 import LeanIO
 import Lean.Data.Json
 import SheafAxioms
+import Governance
 open LeanIO
 open LeanIO.Router
 open Std.Http
@@ -36,7 +37,7 @@ def loadWallet (addr : String) : ContextAsync Wallet := do
   if ← System.FilePath.pathExists path then
     let content ← IO.FS.readFile path
     match Json.parse content with
-    | .ok j => 
+    | .ok j =>
       match fromJson? j with
       | .ok w => return w
       | .error _ => return { address := addr, credits := 0 }
@@ -222,6 +223,67 @@ def loadOrDerive (cid : String) : ContextAsync Json := do
   else
     return jsonPayload cid
 
+
+structure VoteData where
+  cid : String
+  votes : Nat
+  deriving ToJson, FromJson
+
+def getVotesPath (cid : String) : System.FilePath :=
+  let dir := ("data/votes" : System.FilePath)
+  dir / s!"{sanitizeFilename cid}.json"
+
+def loadVotes (cid : String) : ContextAsync Nat := do
+  let path := getVotesPath cid
+  if ← System.FilePath.pathExists path then
+    let content ← IO.FS.readFile path
+    match Json.parse content with
+    | .ok j =>
+      match (fromJson? j : Except String VoteData) with
+      | .ok v => return v.votes
+      | .error _ => return 0
+    | .error _ => return 0
+  else
+    return 0
+
+def saveVotes (cid : String) (votes : Nat) : ContextAsync Unit := do
+  IO.FS.createDirAll "data/votes"
+  let path := getVotesPath cid
+  let v : VoteData := { cid := cid, votes := votes }
+  IO.FS.writeFile path (toJson v |>.compress)
+
+
+structure ProposalRecord where
+  cid : String
+  votesFor : Nat
+  votesAgainst : Nat
+  quorumPercentage : Nat
+  totalEligibleVoters : Nat
+  finalized : Bool
+  passed : Bool
+  deriving ToJson, FromJson
+
+def getProposalPath (cid : String) : System.FilePath :=
+  ("data/proposals" : System.FilePath) / s!"{sanitizeFilename cid}.json"
+
+def loadProposal (cid : String) : ContextAsync (Option ProposalRecord) := do
+  let path := getProposalPath cid
+  if ← System.FilePath.pathExists path then
+    let content ← IO.FS.readFile path
+    match Json.parse content with
+    | .ok j =>
+      match (fromJson? j : Except String ProposalRecord) with
+      | .ok p => return some p
+      | .error _ => return none
+    | .error _ => return none
+  else
+    return none
+
+def saveProposal (p : ProposalRecord) : ContextAsync Unit := do
+  IO.FS.createDirAll "data/proposals"
+  let path := getProposalPath p.cid
+  IO.FS.writeFile path (toJson p |>.compress)
+
 def showSection := GET "/erdfa/{cid}" (⟨cid⟩ : Path String) => do
   let j ← loadOrDerive (cid : String)
   return (show Html from { content := rdfaFromJson j })
@@ -353,15 +415,15 @@ def submitSection := POST "/api/erdfa/submit" (⟨body⟩ : LeanIO.Json SheafSec
   let has_funds ← deductCredits user_wallet fee
   if !has_funds then
     return (Status.paymentRequired, Json.mkObj [("error", Json.str "Insufficient Service Credits. Please stake to earn more.")])
-  
+
   let (status, js) ← processSubmission body
-  
+
   -- Dacă a fost validat cu succes (created/confirmed), nodul primește recompensa (Proof of Succinct Work)
   let statusStr := match js.getObjValAs? String "status" with | .ok s => s | .error _ => ""
   if statusStr == "created" || statusStr == "confirmed" then
     addCredits "lean_node_worker" fee
   -- Dacă a fost contradicție, creditele sunt arse (nu se adaugă nimănui)
-  
+
   return (status, js)
 
 def syncSection := POST "/api/erdfa/sync" (⟨body⟩ : LeanIO.Json (Array SheafSection)) => do
@@ -477,27 +539,296 @@ def withdrawRoute := POST "/api/erdfa/withdraw/{req}" (⟨req⟩ : Path String) 
       return (Status.badRequest, Json.mkObj [("error", Json.str "Insufficient credits or invalid amount")])
   | _ => return (Status.badRequest, Json.mkObj [("error", Json.str "Invalid format. Use address:amount")])
 
+
+def voteRoute := POST "/api/erdfa/vote/{req}" (⟨req⟩ : Path String) => do
+  let parts := (req : String).splitOn ":"
+  match parts with
+  | [cid, voter] =>
+    -- Verificăm dacă utilizatorul are credite
+    let w ← loadWallet voter
+    if w.credits >= 1 then
+      -- Scădem un credit
+      let new_w := { w with credits := w.credits - 1 }
+      saveWallet new_w
+
+      -- Adăugăm un vot pentru CID
+      let currentVotes ← loadVotes cid
+      saveVotes cid (currentVotes + 1)
+
+      return (Status.ok, Json.mkObj [
+        ("status", Json.str "voted"),
+        ("cid", Json.str cid),
+        ("new_total", Json.num (currentVotes + (1 : Nat))),
+        ("remaining_credits", Json.num new_w.credits)
+      ])
+    else
+      return (Status.badRequest, Json.mkObj [("error", Json.str "Not enough Governance Credits to vote.")])
+  | _ => return (Status.badRequest, Json.mkObj [("error", Json.str "Invalid format. Use cid:voter")])
+
+
+def createProposalRoute := POST "/api/erdfa/proposals/create/{req}" (⟨req⟩ : Path String) => do
+  let parts := (req : String).splitOn ":"
+  match parts with
+  | [cid, quorum, eligible] =>
+    let validCid :=
+      cid.length > 0 &&
+      cid.length <= 128 &&
+      cid.toList.all (fun c =>
+        (c >= 'a' && c <= 'z') ||
+        (c >= 'A' && c <= 'Z') ||
+        (c >= '0' && c <= '9') ||
+        c == '-' || c == '_')
+    if !validCid then
+      return (Status.badRequest, Json.mkObj [("error", Json.str "Invalid CID")])
+    match quorum.toNat?, eligible.toNat? with
+    | some q, some e =>
+      if q == 0 || q > 100 || e == 0 then
+        return (Status.badRequest, Json.mkObj [("error", Json.str "Invalid quorum or eligible voters")])
+      let p : ProposalRecord := {
+        cid := cid, votesFor := 0, votesAgainst := 0,
+        quorumPercentage := q, totalEligibleVoters := e,
+        finalized := false, passed := false
+      }
+      let result ← IO.Process.output {
+        cmd := "/usr/bin/python3"
+        args := #["atomic_proposal_store.py", cid, toJson p |>.compress]
+      }
+      if result.exitCode == 0 then
+        return (Status.ok, Json.mkObj [("status", Json.str "created"), ("cid", Json.str cid)])
+      else if result.exitCode == 10 then
+        return (Status.conflict, Json.mkObj [("error", Json.str "Proposal already exists")])
+      else
+        return (Status.internalServerError, Json.mkObj [("error", Json.str "Atomic persistence failed")])
+    | _, _ =>
+      return (Status.badRequest, Json.mkObj [("error", Json.str "Invalid numeric parameters")])
+  | _ =>
+    return (Status.badRequest, Json.mkObj [("error", Json.str "Invalid proposal format")])
+
+def daoAuthorityForward (payload : Lean.Json) : IO (Option Lean.Json) := do
+  try
+    let encoded := payload.compress
+    if encoded.toUTF8.size > 4096 then
+      return none
+    let child ← IO.Process.spawn {
+      cmd := "/usr/bin/timeout"
+      args := #["--signal=TERM", "--kill-after=2s",
+                "3s", "/usr/bin/python3", "authority_bridge.py"]
+      stdin := .piped
+      stdout := .piped
+    }
+    child.stdin.putStr (encoded ++ "\n")
+    child.stdin.flush
+    let response ← child.stdout.getLine
+    let exitCode ← child.wait
+    if exitCode != 0 then
+      return none
+    match Lean.Json.parse response with
+    | .ok result => return some result
+    | .error _ => return none
+  catch _ =>
+    return none
+
+def daoVoteForward (payload : Lean.Json) : IO (Option Lean.Json) := do
+  try
+    let encoded := payload.compress
+    if encoded.toUTF8.size > 4096 then
+      return none
+    let child ← IO.Process.spawn {
+      cmd := "/usr/bin/timeout"
+      args := #["--signal=TERM", "--kill-after=2s",
+                "3s", "/usr/bin/python3", "vote_bridge.py"]
+      stdin := .piped
+      stdout := .piped
+    }
+    child.stdin.putStr (encoded ++ "\n")
+    child.stdin.flush
+    let response ← child.stdout.getLine
+    let exitCode ← child.wait
+    if exitCode != 0 then
+      return none
+    match Lean.Json.parse response with
+    | .ok result => return some result
+    | .error _ => return none
+  catch _ =>
+    return none
+
+
+def daoVoteChallengeRoute :=
+  POST "/api/erdfa/proposals/vote/challenge"
+    (body : Json Lean.Json) => do
+    match body.body.getObjValAs? String "operation" with
+    | .ok "vote_challenge" =>
+      match ← daoVoteForward body.body with
+      | some result =>
+        match result.getObjValAs? String "status" with
+        | .ok "CHALLENGE" => return (Status.ok, result)
+        | _ => return (Status.forbidden, result)
+      | none =>
+        return (Status.internalServerError,
+          Lean.Json.mkObj [("error", Lean.Json.str "Vote authority unavailable")])
+    | _ =>
+      return (Status.forbidden,
+        Lean.Json.mkObj [("error", Lean.Json.str "Invalid vote operation")])
+
+def daoVoteSubmitRoute :=
+  POST "/api/erdfa/proposals/vote/submit"
+    (body : Json Lean.Json) => do
+    match body.body.getObjValAs? String "operation" with
+    | .ok "vote_submit" =>
+      match ← daoVoteForward body.body with
+      | some result =>
+        match result.getObjValAs? String "status" with
+        | .ok "VOTED" => return (Status.ok, result)
+        | _ => return (Status.forbidden, result)
+      | none =>
+        return (Status.internalServerError,
+          Lean.Json.mkObj [("error", Lean.Json.str "Vote authority unavailable")])
+    | _ =>
+      return (Status.forbidden,
+        Lean.Json.mkObj [("error", Lean.Json.str "Invalid vote operation")])
+
+def daoChallengeRoute := POST "/api/erdfa/proposals/challenge" (body : Json Lean.Json) => do
+  match body.body.getObjValAs? String "operation" with
+  | .ok "challenge" =>
+    match ← daoAuthorityForward body.body with
+    | some result =>
+      match result.getObjValAs? String "status" with
+      | .ok "CHALLENGE" => return (Status.ok, result)
+      | _ => return (Status.forbidden, result)
+    | none =>
+      return (Status.internalServerError, Lean.Json.mkObj [
+        ("error", Lean.Json.str "Authority unavailable")
+      ])
+  | _ =>
+    return (Status.forbidden, Lean.Json.mkObj [
+      ("error", Lean.Json.str "Invalid challenge operation")
+    ])
+
+def daoSubmitRoute := POST "/api/erdfa/proposals/submit" (body : Json Lean.Json) => do
+  match body.body.getObjValAs? String "operation" with
+  | .ok "submit" =>
+    match ← daoAuthorityForward body.body with
+    | some result =>
+      match result.getObjValAs? String "status" with
+      | .ok "CREATED" => return (Status.ok, result)
+      | _ => return (Status.forbidden, result)
+    | none =>
+      return (Status.internalServerError, Lean.Json.mkObj [
+        ("error", Lean.Json.str "Authority unavailable")
+      ])
+  | _ =>
+    return (Status.forbidden, Lean.Json.mkObj [
+      ("error", Lean.Json.str "Invalid submit operation")
+    ])
+
+def voteProposalRoute := POST "/api/erdfa/proposals/vote/{req}" (⟨req⟩ : Path String) => do
+  -- req format: cid:voter:choice (choice = yes/no)
+  let parts := (req : String).splitOn ":"
+  match parts with
+  | [cid, voter, choice] =>
+    let w ← loadWallet voter
+    if w.credits >= 1 then
+      let new_w := { w with credits := w.credits - 1 }
+      saveWallet new_w
+
+      match ← loadProposal cid with
+      | some p =>
+        if p.finalized then
+          return (Status.badRequest, Json.mkObj [("error", Json.str "Proposal already finalized")])
+
+        let new_p := if choice == "yes" then { p with votesFor := p.votesFor + 1 } else { p with votesAgainst := p.votesAgainst + 1 }
+        saveProposal new_p
+
+        return (Status.ok, Json.mkObj [
+          ("status", Json.str "voted"), ("cid", Json.str cid),
+          ("votesFor", Json.num new_p.votesFor), ("votesAgainst", Json.num new_p.votesAgainst),
+          ("remaining_credits", Json.num new_w.credits)
+        ])
+      | none => return (Status.badRequest, Json.mkObj [("error", Json.str "Proposal not found")])
+    else
+      return (Status.badRequest, Json.mkObj [("error", Json.str "Not enough credits")])
+  | _ => return (Status.badRequest, Json.mkObj [("error", Json.str "Invalid format. Use cid:voter:choice")])
+
+def finalizeProposalRoute := POST "/api/erdfa/proposals/finalize/{cid}" (⟨cid⟩ : Path String) => do
+  match ← loadProposal (cid : String) with
+  | some p =>
+    if p.finalized then
+      return (Status.badRequest, Json.mkObj [("error", Json.str "Already finalized")])
+
+    let govProp : SolfunmemeDAO.Proposal := {
+      id := p.cid, votesFor := p.votesFor, votesAgainst := p.votesAgainst,
+      totalEligibleVoters := p.totalEligibleVoters, quorumPercentage := p.quorumPercentage
+    }
+
+    let passed := SolfunmemeDAO.isProposalPassed govProp
+    let final_p := { p with finalized := true, passed := passed }
+    saveProposal final_p
+
+    return (Status.ok, Json.mkObj [
+      ("status", Json.str "finalized"), ("cid", Json.str p.cid),
+      ("passed", Json.bool passed),
+      ("votesFor", Json.num p.votesFor), ("votesAgainst", Json.num p.votesAgainst)
+    ])
+  | none => return (Status.badRequest, Json.mkObj [("error", Json.str "Proposal not found")])
+
+def daoSqliteListRoute := GET "/api/erdfa/proposals/list" => do
+  let payload := Lean.Json.mkObj [
+    ("operation", Lean.Json.str "list")
+  ]
+  match ← daoAuthorityForward payload with
+  | some result =>
+    match result.getObjValAs? String "status" with
+    | .ok "LIST" => return (Status.ok, result)
+    | _ => return (Status.internalServerError, Lean.Json.mkObj [
+        ("error", Lean.Json.str "Proposal list unavailable")
+      ])
+  | none =>
+    return (Status.internalServerError, Lean.Json.mkObj [
+      ("error", Lean.Json.str "Proposal list unavailable")
+    ])
+
+def getMessageEnc := GET "/message.enc" => do
+  return {
+    path := ("../sfm-message/message.enc" : System.FilePath)
+    cacheControl := none
+  : File }
+
+def getSodiumJs := GET "/sodium.js" => do
+  let path := ("sodium.js" : System.FilePath)
+  if ← System.FilePath.pathExists path then
+    let content ← IO.FS.readFile path
+    return content
+  else
+    return "console.log('sodium.js not found');"
+
 def index := GET "/" => do
   return "lean-worker ERDFa/Sheaf: try GET /erdfa/{cid} or /api/erdfa/{cid}"
 
 def main : IO Unit := Async.block do
-  let router := Router.empty 
-    |>.addRoute showSection 
-    |>.addRoute showJson 
+  let router := Router.empty
+    |>.addRoute showSection
+    |>.addRoute showJson
     |>.addRoute listAll
     |>.addRoute exportAll
     |>.addRoute statusEndpoint
     |>.addRoute tileDashboard
     |>.addRoute hashOracle
-    |>.addRoute submitSection 
+    |>.addRoute submitSection
     |>.addRoute syncSection
     |>.addRoute showUi
     |>.addRoute filterSections
     |>.addRoute getWalletRoute
     |>.addRoute stakeRoute
     |>.addRoute withdrawRoute
+    |>.addRoute getSodiumJs
+    |>.addRoute daoSqliteListRoute
+    |>.addRoute daoChallengeRoute
+    |>.addRoute daoSubmitRoute
+    |>.addRoute daoVoteChallengeRoute
+    |>.addRoute daoVoteSubmitRoute
+
     |>.addRoute index
-  let addr := .v4 ⟨.ofParts 0 0 0 0, 8080⟩
+  let addr := .v4 ⟨.ofParts 127 0 0 1, 9090⟩
   let server ← router.serve addr
-  IO.println "lean-worker on http://127.0.0.1:8080"
+  IO.println "lean-worker on http://127.0.0.1:9090/ui"
   server.waitShutdown
