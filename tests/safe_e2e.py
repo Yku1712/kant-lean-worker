@@ -74,7 +74,7 @@ assert not (ROOT / "authority.sqlite3").exists()
 with (ROOT / "SERVER.log").open("wb") as log:
     process = subprocess.Popen(
         [str(ROOT / ".lake/build/bin/lean-worker")],
-        cwd="/work",
+        cwd=str(ROOT),
         stdin=subprocess.DEVNULL,
         stdout=log,
         stderr=subprocess.STDOUT
