@@ -445,37 +445,10 @@ def getWalletRoute := GET "/api/erdfa/wallet/{addr}" (⟨addr⟩ : Path String) 
   return Json.mkObj [("address", Json.str w.address), ("credits", Json.num w.credits)]
 
 def stakeRoute := POST "/api/erdfa/stake/{req}" (⟨req⟩ : Path String) => do
-  let parts := (req : String).splitOn ":"
-  match parts with
-  | [addr, amount] =>
-    let amt := match amount.toNat? with | some n => n | none => 0
-    addCredits addr amt
-    let w ← loadWallet addr
-    return (Status.ok, Json.mkObj [("status", Json.str "staked"), ("address", Json.str w.address), ("credits", Json.num w.credits)])
-  | _ => return (Status.badRequest, Json.mkObj [("error", Json.str "Invalid format. Use address:amount")])
-
+  return (Status.badRequest, Json.mkObj [("error", Json.str "Endpoint disabled pending authenticated authorization and verified settlement")])
 
 def withdrawRoute := POST "/api/erdfa/withdraw/{req}" (⟨req⟩ : Path String) => do
-  let parts := (req : String).splitOn ":"
-  match parts with
-  | [addr, amountStr] =>
-    let amount := match amountStr.toNat? with | some n => n | none => 0
-    let w ← loadWallet addr
-    if w.credits >= amount && amount > 0 then
-      let new_w := { w with credits := w.credits - amount }
-      saveWallet new_w
-      addCredits "lean_node_worker" amount -- Transferăm în trezoreria nodului
-      let receipt := s!"0xwithdraw_{addr}_{amount}_{w.credits}_sol"
-      return (Status.ok, Json.mkObj [
-        ("status", Json.str "withdrawn"),
-        ("address", Json.str addr),
-        ("amount", Json.num amount),
-        ("remaining_credits", Json.num new_w.credits),
-        ("receipt", Json.str receipt)
-      ])
-    else
-      return (Status.badRequest, Json.mkObj [("error", Json.str "Insufficient credits or invalid amount")])
-  | _ => return (Status.badRequest, Json.mkObj [("error", Json.str "Invalid format. Use address:amount")])
+  return (Status.badRequest, Json.mkObj [("error", Json.str "Endpoint disabled pending authenticated authorization and verified settlement")])
 
 def index := GET "/" => do
   return "lean-worker ERDFa/Sheaf: try GET /erdfa/{cid} or /api/erdfa/{cid}"
